@@ -21,6 +21,7 @@ export default class ListsController {
     const lists = (
       await List.query()
         .where('is_my_library', false)
+        .where('is_public', true)
         .preload('user')
         .preload('bookItems')
         .paginate(page, limit)
@@ -36,7 +37,8 @@ export default class ListsController {
     return response.ok(lists)
   }
 
-  public async show({ request, response }: HttpContext) {
+  public async show({ auth, request, response }: HttpContext) {
+    const user = await auth.authenticate()
     const payload = await request.validateUsing(showSchema)
     const { id } = payload.params
     const list = (
@@ -62,7 +64,13 @@ export default class ListsController {
       })
     }
 
-    return response.ok(list)
+    if (list.isPublic || list.userId === user.id) {
+      return response.ok(list)
+    }
+
+    return response.unauthorized({
+      message: 'You are not authorized to view this list',
+    })
   }
 
   public async indexByUser({ request, response }: HttpContext) {
@@ -73,6 +81,7 @@ export default class ListsController {
       await List.query()
         .where('user_id', userId)
         .where('is_my_library', false)
+        .where('is_public', true)
         .preload('user')
         .preload('bookItems')
         .paginate(page, limit)

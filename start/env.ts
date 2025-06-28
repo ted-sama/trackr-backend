@@ -33,7 +33,7 @@ export default await Env.create(new URL('../', import.meta.url), {
   AWS_ACCESS_KEY_ID: Env.schema.string(),
   AWS_SECRET_ACCESS_KEY: Env.schema.string(),
   AWS_REGION: Env.schema.string(),
-  AWS_BUCKET_NAME: Env.schema.string(),
+  S3_BUCKET: Env.schema.string(),
   CDN_URL: Env.schema.string({ format: 'url' }),
 
   // Upstash Redis Cache
@@ -49,5 +49,4 @@ export default await Env.create(new URL('../', import.meta.url), {
   |----------------------------------------------------------
   */
   DRIVE_DISK: Env.schema.enum(['fs', 's3'] as const),
-  S3_BUCKET: Env.schema.string()
 })

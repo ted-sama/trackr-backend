@@ -13,6 +13,7 @@ const CategoriesController = () => import('#controllers/categories_controller')
 const AuthController = () => import('#controllers/auth_controller')
 const UsersController = () => import('#controllers/users_controller')
 const ListsController = () => import('#controllers/lists_controller')
+const LibraryController = () => import('#controllers/libraries_controller')
 
 router.get('/', async () => {
   return {
@@ -30,6 +31,8 @@ router
 router
   .group(() => {
     router.get('/', [UsersController, 'me'])
+    router.get('/lists', [UsersController, 'showLists'])
+    router.get('/library', [UsersController, 'showLibrary'])
   })
   .prefix('me')
 
@@ -61,3 +64,12 @@ router
     router.post('/:id/backdrop', [ListsController, 'uploadBackdropImage'])
   })
   .prefix('lists')
+
+router
+  .group(() => {
+    router.get('/', [LibraryController, 'index'])
+    router.post('/:bookId', [LibraryController, 'add'])
+    router.delete('/:bookId', [LibraryController, 'remove'])
+    router.patch('/:bookId', [LibraryController, 'update'])
+  })
+  .prefix('library')
