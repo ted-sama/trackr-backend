@@ -1,8 +1,19 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Book from '#models/book'
 import { updateLibraryValidator } from '#validators/library'
+import BookTracking from '#models/book_tracking'
+import { DateTime } from 'luxon'
 
 export default class LibraryController {
+  /**
+   * @summary Get user's library
+   * @tag Library
+   * @description Returns the authenticated user's library with reading progress and tracking information
+   * @paramQuery page - Page number for pagination - @type(number)
+   * @paramQuery limit - Number of items per page - @type(number)
+   * @responseBody 200 - <BookTracking[]>.with(book).paginated() - User's library with book tracking
+   * @responseBody 401 - Unauthorized
+   */
   async index({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
     const page = request.input('page', 1)
@@ -12,6 +23,17 @@ export default class LibraryController {
 
     return response.ok(library)
   }
+  
+  /**
+   * @summary Add book to library
+   * @tag Library
+   * @description Adds a book to the user's library for tracking
+   * @paramPath bookId - Book ID - @type(number) @required
+   * @responseBody 201 - {"message": "string", "bookId": "number"} - Book added to library
+   * @responseBody 401 - Unauthorized
+   * @responseBody 404 - Book not found
+   * @responseBody 409 - Book already in library
+   */
   async add({ auth, params, response }: HttpContext) {
     const user = await auth.authenticate()
     const book = await Book.findOrFail(params.bookId)
@@ -27,6 +49,15 @@ export default class LibraryController {
     return response.created({ message: 'Book added to library', bookId: book.id })
   }
 
+  /**
+   * @summary Remove book from library
+   * @tag Library
+   * @description Removes a book from the user's library and deletes tracking data
+   * @paramPath bookId - Book ID - @type(number) @required
+   * @responseBody 204 - Book removed from library
+   * @responseBody 401 - Unauthorized
+   * @responseBody 404 - Book not found in library
+   */
   async remove({ auth, params, response }: HttpContext) {
     const user = await auth.authenticate()
     const book = await Book.findOrFail(params.bookId)
@@ -42,10 +73,22 @@ export default class LibraryController {
     return response.noContent()
   }
 
+  /**
+   * @summary Update book tracking
+   * @tag Library
+   * @description Updates tracking information for a book in the user's library
+   * @paramPath bookId - Book ID - @type(number) @required
+   * @requestBody <updateLibraryValidator> - Book tracking update data
+   * @responseBody 200 - <BookTracking> - Updated book tracking
+   * @responseBody 401 - Unauthorized
+   * @responseBody 404 - Book not found in library
+   * @responseBody 422 - Validation error
+   */
   async update({ auth, params, request, response }: HttpContext) {
     const user = await auth.authenticate()
     const book = await Book.findOrFail(params.bookId)
     const payload = await request.validateUsing(updateLibraryValidator)
+    const { rating, currentChapter, currentVolume, status, notes } = payload
 
     const bookTracking = await user
       .related('bookTrackings')
@@ -53,9 +96,27 @@ export default class LibraryController {
       .where('book_id', book.id)
       .firstOrFail()
 
-    bookTracking.merge(payload)
+    if (status === 'reading' && bookTracking.status !== 'reading') {
+      bookTracking.merge({ startDate: DateTime.now() })
+    }
+
+    if (status === 'completed' && bookTracking.status !== 'completed') {
+      bookTracking.merge({ finishDate: DateTime.now() })
+    }
+
+    if (rating && rating === 0) {
+      bookTracking.merge({ rating: null })
+    }
+
+    if ((currentChapter && currentChapter !== bookTracking.currentChapter) || (currentVolume && currentVolume !== bookTracking.currentVolume)) {
+      bookTracking.merge({ lastReadAt: DateTime.now() })
+    }
+
+    bookTracking.merge({ rating, currentChapter, currentVolume, status, notes })
     await bookTracking.save()
 
-    return response.ok(bookTracking)
+    const updatedBookTracking = await BookTracking.query().where('book_id', book.id).preload('book').first()
+
+    return response.ok(updatedBookTracking)
   }
 }

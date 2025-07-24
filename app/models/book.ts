@@ -54,6 +54,9 @@ export default class Book extends BaseModel {
   @column()
   declare alternativeTitles: string[] | null
 
+  @column({ serializeAs: null })
+  declare searchText: string | null
+
   @column()
   declare dataSource: string | null
 

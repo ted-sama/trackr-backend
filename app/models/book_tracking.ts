@@ -1,11 +1,30 @@
 import { DateTime } from 'luxon'
-import { BaseModel, column, belongsTo } from '@adonisjs/lucid/orm'
+import { BaseModel, column, belongsTo, beforeUpdate, beforeSave } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import User from '#models/user'
 import Book from '#models/book'
 
 export default class BookTracking extends BaseModel {
   public static table = 'book_tracking'
+  
+  @beforeUpdate()
+  static async updatedAt(bookTracking: BookTracking) {
+    bookTracking.updatedAt = DateTime.now()
+  }
+
+  @beforeSave()
+  static async lastReadAt(bookTracking: BookTracking) {
+    if (bookTracking.currentChapter === null && bookTracking.currentVolume === null) {
+      bookTracking.lastReadAt = null
+    }
+  }
+
+  @beforeSave()
+  static async currentChapter(bookTracking: BookTracking) {
+    if (bookTracking.currentChapter === 0) {
+      bookTracking.currentChapter = null
+    }
+  }
 
   @column({ isPrimary: true })
   declare userId: string
@@ -14,7 +33,7 @@ export default class BookTracking extends BaseModel {
   declare bookId: number
 
   @column()
-  declare status: string
+  declare status: 'reading' | 'completed' | 'on_hold' | 'dropped' | 'plan_to_read'
 
   @column()
   declare currentChapter: number | null

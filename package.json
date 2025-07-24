@@ -59,6 +59,7 @@
     "@aws-sdk/client-s3": "^3.837.0",
     "@aws-sdk/s3-request-presigner": "^3.837.0",
     "@vinejs/vine": "^3.0.1",
+    "adonis-autoswagger": "^3.73.0",
     "luxon": "^3.6.1",
     "pg": "^8.16.1",
     "reflect-metadata": "^0.2.2"

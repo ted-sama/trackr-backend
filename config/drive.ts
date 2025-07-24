@@ -23,6 +23,7 @@ const driveConfig = defineConfig({
       },
       region: env.get('AWS_REGION'),
       bucket: env.get('S3_BUCKET'),
+      cdnUrl: env.get('CDN_URL'),
       visibility: 'public',
     }),
   },

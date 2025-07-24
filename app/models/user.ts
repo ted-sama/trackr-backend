@@ -33,16 +33,6 @@ export default class User extends compose(BaseModel, AuthFinder) {
     user.plan = 'free'
   }
 
-  @afterCreate()
-  static async createDefaultList(user: User) {
-    await List.create({
-      userId: user.id,
-      name: 'My Library',
-      isPublic: false,
-      isMyLibrary: true,
-    })
-  }
-
   @column()
   declare username: string
 

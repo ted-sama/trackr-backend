@@ -4,6 +4,15 @@ import type { HttpContext } from '@adonisjs/core/http'
 import { loginSchema, registerSchema } from '#validators/auth'
 
 export default class AuthController {
+  /**
+   * @summary Register a new user
+   * @tag Authentication
+   * @description Creates a new user account with email, username, and password
+   * @requestBody <registerSchema> - User registration data
+   * @responseBody 200 - <User>.exclude(password) - Successfully registered user
+   * @responseBody 400 - Validation error
+   * @responseBody 422 - User already exists
+   */
   async register({ request, response }: HttpContext) {
     const { email, username, password } = await registerSchema.validate(request.body())
 
@@ -16,6 +25,15 @@ export default class AuthController {
     return response.ok(user)
   }
 
+  /**
+   * @summary Login user
+   * @tag Authentication
+   * @description Authenticates user with email and password, returns access token
+   * @requestBody <loginSchema> - User login credentials
+   * @responseBody 200 - {"type": "bearer", "name": "trk_", "token": "string", "abilities": ["*"], "lastUsedAt": "string", "expiresAt": "string"} - Authentication token
+   * @responseBody 400 - Invalid credentials
+   * @responseBody 422 - Validation error
+   */
   async login({ request, response }: HttpContext) {
     const { email, password } = await loginSchema.validate(request.body())
 
