@@ -43,6 +43,9 @@ export default class Book extends BaseModel {
   declare description: string | null
 
   @column()
+  declare descriptionFr: string | null
+
+  @column()
   declare status: string
 
   @column()

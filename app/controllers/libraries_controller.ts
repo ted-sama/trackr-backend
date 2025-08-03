@@ -19,11 +19,15 @@ export default class LibraryController {
     const page = request.input('page', 1)
     const limit = request.input('limit', 10)
 
-    const library = await user.related('bookTrackings').query().preload('book').paginate(page, limit)
+    const library = await user
+      .related('bookTrackings')
+      .query()
+      .preload('book')
+      .paginate(page, limit)
 
     return response.ok(library)
   }
-  
+
   /**
    * @summary Add book to library
    * @tag Library
@@ -38,7 +42,11 @@ export default class LibraryController {
     const user = await auth.authenticate()
     const book = await Book.findOrFail(params.bookId)
 
-    const existingTracking = await user.related('bookTrackings').query().where('book_id', book.id).first()
+    const existingTracking = await user
+      .related('bookTrackings')
+      .query()
+      .where('book_id', book.id)
+      .first()
 
     if (existingTracking) {
       return response.conflict({ message: 'Book already in library' })
@@ -108,14 +116,20 @@ export default class LibraryController {
       bookTracking.merge({ rating: null })
     }
 
-    if ((currentChapter && currentChapter !== bookTracking.currentChapter) || (currentVolume && currentVolume !== bookTracking.currentVolume)) {
+    if (
+      (currentChapter && currentChapter !== bookTracking.currentChapter) ||
+      (currentVolume && currentVolume !== bookTracking.currentVolume)
+    ) {
       bookTracking.merge({ lastReadAt: DateTime.now() })
     }
 
     bookTracking.merge({ rating, currentChapter, currentVolume, status, notes })
     await bookTracking.save()
 
-    const updatedBookTracking = await BookTracking.query().where('book_id', book.id).preload('book').first()
+    const updatedBookTracking = await BookTracking.query()
+      .where('book_id', book.id)
+      .preload('book')
+      .first()
 
     return response.ok(updatedBookTracking)
   }

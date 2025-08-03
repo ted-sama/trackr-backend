@@ -6,7 +6,7 @@ import Book from '#models/book'
 
 export default class BookTracking extends BaseModel {
   public static table = 'book_tracking'
-  
+
   @beforeUpdate()
   static async updatedAt(bookTracking: BookTracking) {
     bookTracking.updatedAt = DateTime.now()

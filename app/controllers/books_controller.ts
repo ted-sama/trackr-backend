@@ -1,6 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Book from '#models/book'
 import db from '@adonisjs/lucid/services/db'
+import { aiTranslate } from '../helpers/ai_translate.js'
 
 export default class BooksController {
   /**
@@ -33,6 +34,13 @@ export default class BooksController {
     if (!book) {
       return response.notFound({ message: 'Book not found' })
     }
+
+    // Translate the book's description to fr if not present in db
+    if (!book.descriptionFr && book.description) {
+      book.descriptionFr = await aiTranslate(book.description, 'fr')
+      await book.save()
+    }
+
     return response.ok(book)
   }
 
@@ -49,7 +57,9 @@ export default class BooksController {
 
     const books = await Book.query()
       .select('*')
-      .select(db.raw(`
+      .select(
+        db.raw(
+          `
         CASE 
           WHEN LOWER(title) = ? THEN 100
           WHEN LOWER(title) LIKE ? THEN 90
@@ -65,25 +75,34 @@ export default class BooksController {
           WHEN search_text ILIKE ? THEN 60
           ELSE 50
         END as relevance_score
-      `, [
-        normalizedQuery,
-        `${normalizedQuery}%`,
-        normalizedQuery,
-        `${normalizedQuery}%`,
-        `%${normalizedQuery}%`,
-        `%${normalizedQuery}%`
-      ]))
+      `,
+          [
+            normalizedQuery,
+            `${normalizedQuery}%`,
+            normalizedQuery,
+            `${normalizedQuery}%`,
+            `%${normalizedQuery}%`,
+            `%${normalizedQuery}%`,
+          ]
+        )
+      )
       .where((searchQuery) => {
         searchQuery
           .whereRaw('LOWER(title) = ?', [normalizedQuery])
           .orWhereILike('title', `%${normalizedQuery}%`)
-          .orWhereRaw('EXISTS (SELECT 1 FROM unnest(alternative_titles) AS alt_title WHERE LOWER(alt_title) = ?)', [normalizedQuery])
-          .orWhereRaw('EXISTS (SELECT 1 FROM unnest(alternative_titles) AS alt_title WHERE LOWER(alt_title) LIKE ?)', [`%${normalizedQuery}%`])
+          .orWhereRaw(
+            'EXISTS (SELECT 1 FROM unnest(alternative_titles) AS alt_title WHERE LOWER(alt_title) = ?)',
+            [normalizedQuery]
+          )
+          .orWhereRaw(
+            'EXISTS (SELECT 1 FROM unnest(alternative_titles) AS alt_title WHERE LOWER(alt_title) LIKE ?)',
+            [`%${normalizedQuery}%`]
+          )
           .orWhereILike('author', `%${normalizedQuery}%`)
           .orWhereILike('search_text', `%${normalizedQuery}%`)
       })
       .orderBy('relevance_score', 'desc')
-      .orderBy('rating_count', 'desc')  
+      .orderBy('rating_count', 'desc')
       .orderBy('rating', 'desc')
       .paginate(page, limit)
 

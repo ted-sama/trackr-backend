@@ -27,15 +27,21 @@ export default class UsersController {
   async showLists({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
     const { page = 1, limit = 10 } = request.qs()
-    const lists = (await List.query().where('user_id', user.id).preload('user').preload('bookItems').paginate(page, limit)).serialize({
-        relations: {
-          owner: {
-            fields: {
-              pick: ['id', 'username', 'avatar', 'plan'],
-            },
+    const lists = (
+      await List.query()
+        .where('user_id', user.id)
+        .preload('user')
+        .preload('bookItems')
+        .paginate(page, limit)
+    ).serialize({
+      relations: {
+        owner: {
+          fields: {
+            pick: ['id', 'username', 'avatar', 'plan'],
           },
         },
-      })
+      },
+    })
     return response.ok(lists)
   }
 }

@@ -14,20 +14,21 @@ const AuthController = () => import('#controllers/auth_controller')
 const UsersController = () => import('#controllers/users_controller')
 const ListsController = () => import('#controllers/lists_controller')
 const LibraryController = () => import('#controllers/libraries_controller')
+const RecapController = () => import('#controllers/recap_controller')
 
-import AutoSwagger from "adonis-autoswagger";
-import swagger from "#config/swagger";
+import AutoSwagger from 'adonis-autoswagger'
+import swagger from '#config/swagger'
 // returns swagger in YAML
-router.get("/swagger", async () => {
-  return AutoSwagger.default.docs(router.toJSON(), swagger);
-});
+router.get('/swagger', async () => {
+  return AutoSwagger.default.docs(router.toJSON(), swagger)
+})
 
 // Renders Swagger-UI and passes YAML-output of /swagger
-router.get("/docs", async () => {
-  return AutoSwagger.default.ui("/swagger", swagger);
+router.get('/docs', async () => {
+  return AutoSwagger.default.ui('/swagger', swagger)
   // return AutoSwagger.default.scalar("/swagger"); to use Scalar instead. If you want, you can pass proxy url as second argument here.
   // return AutoSwagger.default.rapidoc("/swagger", "view"); to use RapiDoc instead (pass "view" default, or "read" to change the render-style)
-});
+})
 
 router.get('/', async () => {
   return {
@@ -58,6 +59,7 @@ router
     router.get('/', [BooksController, 'index'])
     router.get('/search', [BooksController, 'search'])
     router.get('/:id', [BooksController, 'show'])
+    router.get('/:id/recap/:chapterId', [RecapController, 'recap'])
   })
   .prefix('books')
 

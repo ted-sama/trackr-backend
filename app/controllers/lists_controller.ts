@@ -69,7 +69,9 @@ export default class ListsController {
 
     const lists = await List.query()
       .select('*')
-      .select(db.raw(`
+      .select(
+        db.raw(
+          `
         CASE 
           WHEN LOWER(name) = ? THEN 100
           WHEN LOWER(name) LIKE ? THEN 90
@@ -86,23 +88,30 @@ export default class ListsController {
           WHEN search_text ILIKE ? THEN 60
           ELSE 50
         END as relevance_score
-      `, [
-        normalizedQuery,
-        `${normalizedQuery}%`,
-        normalizedQuery,
-        `${normalizedQuery}%`,
-        normalizedQuery,
-        `${normalizedQuery}%`,
-        `%${normalizedQuery}%`
-      ]))
+      `,
+          [
+            normalizedQuery,
+            `${normalizedQuery}%`,
+            normalizedQuery,
+            `${normalizedQuery}%`,
+            normalizedQuery,
+            `${normalizedQuery}%`,
+            `%${normalizedQuery}%`,
+          ]
+        )
+      )
       .where((searchQuery) => {
         searchQuery
           .whereRaw('LOWER(name) = ?', [normalizedQuery])
           .orWhereILike('name', `%${normalizedQuery}%`)
           .orWhereRaw('LOWER(description) = ?', [normalizedQuery])
           .orWhereILike('description', `%${normalizedQuery}%`)
-          .orWhereRaw('EXISTS (SELECT 1 FROM unnest(tags) AS tag WHERE LOWER(tag) = ?)', [normalizedQuery])
-          .orWhereRaw('EXISTS (SELECT 1 FROM unnest(tags) AS tag WHERE LOWER(tag) LIKE ?)', [`%${normalizedQuery}%`])
+          .orWhereRaw('EXISTS (SELECT 1 FROM unnest(tags) AS tag WHERE LOWER(tag) = ?)', [
+            normalizedQuery,
+          ])
+          .orWhereRaw('EXISTS (SELECT 1 FROM unnest(tags) AS tag WHERE LOWER(tag) LIKE ?)', [
+            `%${normalizedQuery}%`,
+          ])
           .orWhereILike('search_text', `%${normalizedQuery}%`)
       })
       .where('is_my_library', false)
@@ -229,11 +238,7 @@ export default class ListsController {
     })
 
     const createdList = (
-      await List.query()
-        .where('id', list.id)
-        .preload('user')
-        .preload('bookItems')
-        .first()
+      await List.query().where('id', list.id).preload('user').preload('bookItems').first()
     )?.serialize({
       relations: {
         owner: {
@@ -275,11 +280,7 @@ export default class ListsController {
     await list.merge({ name, description, tags, isPublic, backdropImage, ranked }).save()
 
     const updatedList = (
-      await List.query()
-        .where('id', id)
-        .preload('user')
-        .preload('bookItems')
-        .first()
+      await List.query().where('id', id).preload('user').preload('bookItems').first()
     )?.serialize({
       relations: {
         owner: {
