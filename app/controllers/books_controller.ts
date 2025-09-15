@@ -1,7 +1,8 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Book from '#models/book'
 import db from '@adonisjs/lucid/services/db'
-import { aiTranslate } from '../helpers/ai_translate.js'
+import { aiTranslate } from '#helpers/ai_translate'
+import { getRecommendations } from '#services/recommandations'
 
 export default class BooksController {
   /**
@@ -10,14 +11,64 @@ export default class BooksController {
    * @description Returns a paginated list of books with optional filtering
    * @paramQuery page - Page number for pagination - @type(number)
    * @paramQuery limit - Number of items per page (max 100) - @type(number)
+   * @paramQuery sort - Sorting method - @type(string) @enum(top_rated, most_listed, most_tracked)
    * @responseBody 200 - <Book[]>.paginated() - List of books with pagination
    * @responseBody 400 - Bad request
    */
   async index({ request, response }: HttpContext) {
     const page = request.input('page', 1)
     const limit = request.input('limit', 20)
+    const sort = request.input('sort') as 'top_rated' | 'most_listed' | 'most_tracked' | undefined
 
-    const books = await Book.query().paginate(page, limit)
+    const query = Book.query().select('*')
+
+    switch (sort) {
+      case 'top_rated': {
+        query.orderBy('rating', 'desc').orderBy('rating_count', 'desc')
+        break
+      }
+      case 'most_listed': {
+        query
+          .select(
+            db.raw(
+              `COALESCE((
+                SELECT COUNT(*)::int
+                FROM list_books lb
+                JOIN lists l ON l.id = lb.list_id
+                WHERE lb.book_id = books.id
+                  AND l.is_public = true
+                  AND l.is_my_library = false
+              ), 0) AS public_lists_count`
+            )
+          )
+          .orderBy('public_lists_count', 'desc')
+          .orderBy('rating_count', 'desc')
+          .orderBy('rating', 'desc')
+        break
+      }
+      case 'most_tracked': {
+        query
+          .select(
+            db.raw(
+              `COALESCE((
+                SELECT COUNT(*)::int
+                FROM book_tracking bt
+                WHERE bt.book_id = books.id
+              ), 0) AS tracking_count`
+            )
+          )
+          .orderBy('tracking_count', 'desc')
+          .orderBy('rating_count', 'desc')
+          .orderBy('rating', 'desc')
+        break
+      }
+      default: {
+        // Default ordering: newest first
+        query.orderBy('created_at', 'desc')
+      }
+    }
+
+    const books = await query.paginate(page, limit)
     return response.ok(books)
   }
 
@@ -107,5 +158,42 @@ export default class BooksController {
       .paginate(page, limit)
 
     return response.ok(books)
+  }
+
+  async getBySameAuthor({ params, response }: HttpContext) {
+    const book = await Book.find(params.id)
+    if (!book) {
+      return response.notFound({ message: 'Book not found' })
+    }
+
+    if (book.author) {
+      const books = await Book.query()
+        .whereILike('author', book.author)
+        .whereNot('id', book.id)
+        .orderBy('rating', 'desc')
+        .limit(5)
+
+      return response.ok(books)
+    }
+
+    return response.ok([])
+  }
+
+  async recommendations({ auth, response }: HttpContext) {
+    const user = await auth.authenticate()
+
+    const recommendedBookIds = await getRecommendations(user.id)
+
+    // Create array literal for SQL
+    const arrayLiteral = recommendedBookIds.map((id: number) => String(id)).join(',')
+
+    const recommendedBooks = await Book.query()
+      .whereIn(
+        'id',
+        recommendedBookIds.map((id: number) => String(id))
+      )
+      .orderByRaw(`ARRAY_POSITION(ARRAY[${arrayLiteral}]::bigint[], id) ASC`)
+
+    return response.ok(recommendedBooks)
   }
 }

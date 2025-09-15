@@ -59,6 +59,7 @@ router
     router.get('/', [BooksController, 'index'])
     router.get('/search', [BooksController, 'search'])
     router.get('/:id', [BooksController, 'show'])
+    router.get('/:id/same', [BooksController, 'getBySameAuthor'])
     router.get('/:id/recap/:chapterId', [RecapController, 'recap'])
   })
   .prefix('books')
@@ -85,3 +86,9 @@ router
     router.put('/:id/backdrop', [ListsController, 'uploadBackdropImage'])
   })
   .prefix('lists')
+
+router
+  .group(() => {
+    router.get('/', [BooksController, 'recommendations'])
+  })
+  .prefix('recommendations')
