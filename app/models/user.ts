@@ -1,13 +1,14 @@
 import { DateTime } from 'luxon'
 import hash from '@adonisjs/core/services/hash'
 import { compose } from '@adonisjs/core/helpers'
-import { BaseModel, column, hasMany, beforeCreate, afterCreate } from '@adonisjs/lucid/orm'
+import { BaseModel, column, hasMany, beforeCreate, manyToMany } from '@adonisjs/lucid/orm'
 import { withAuthFinder } from '@adonisjs/auth/mixins/lucid'
 import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
-import type { HasMany } from '@adonisjs/lucid/types/relations'
+import type { HasMany, ManyToMany } from '@adonisjs/lucid/types/relations'
 import { randomUUID } from 'node:crypto'
 import List from '#models/list'
 import BookTracking from '#models/book_tracking'
+import Book from './book.js'
 
 const AuthFinder = withAuthFinder(() => hash.use('scrypt'), {
   uids: ['email'],
@@ -54,6 +55,15 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column()
   declare preferences: Record<string, any> | null
 
+  @column()
+  declare backdropMode: string
+
+  @column()
+  declare backdropColor: string
+
+  @column()
+  declare backdropImage: string | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
@@ -65,6 +75,11 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
   @hasMany(() => BookTracking)
   declare bookTrackings: HasMany<typeof BookTracking>
+
+  @manyToMany(() => Book, {
+    pivotTable: 'users_top_books',
+  })
+  declare topBooks: ManyToMany<typeof Book>
 
   static accessTokens = DbAccessTokensProvider.forModel(User, {
     expiresIn: '30 days',

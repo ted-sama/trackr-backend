@@ -24,7 +24,7 @@ export default class BooksController {
 
     switch (sort) {
       case 'top_rated': {
-        query.orderBy('rating', 'desc').orderBy('rating_count', 'desc')
+        query.whereNotNull('rating').orderBy('rating', 'desc').orderBy('rating_count', 'desc')
         break
       }
       case 'most_listed': {

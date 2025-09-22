@@ -22,6 +22,8 @@ export const createSchema = vine.compile(
     description: vine.string().trim().optional(),
     tags: vine.array(vine.string().trim()).optional(),
     isPublic: vine.boolean().optional(),
+    backdropMode: vine.string().trim().optional(),
+    backdropColor: vine.string().trim().optional(),
     backdropImage: vine.string().trim().optional(),
     ranked: vine.boolean().optional(),
   })
@@ -36,6 +38,8 @@ export const updateSchema = vine.compile(
     description: vine.string().trim().optional(),
     tags: vine.array(vine.string().trim()).optional(),
     isPublic: vine.boolean().optional(),
+    backdropMode: vine.string().trim().optional(),
+    backdropColor: vine.string().trim().optional(),
     backdropImage: vine.string().trim().optional(),
     ranked: vine.boolean().optional(),
   })

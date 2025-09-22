@@ -133,4 +133,49 @@ export default class LibraryController {
 
     return response.ok(updatedBookTracking)
   }
+
+  async addToTopBooks({ auth, params, response }: HttpContext) {
+    const user = await auth.authenticate()
+    const book = await Book.find(params.id)
+    if (!book) {
+      return response.notFound({ message: 'Book not found' })
+    }
+
+    const existingRelation = await user
+      .related('topBooks')
+      .query()
+      .where('book_id', book.id)
+      .first()
+    if (existingRelation) {
+      return response.conflict({ message: 'Book already in top books' })
+    }
+
+    const topBooksCount = await user.related('topBooks').query().count('* as total')
+    if (topBooksCount[0].$extras.total >= 3) {
+      return response.conflict({ message: 'You can only have 3 top books' })
+    }
+
+    await user.related('topBooks').attach([book.id])
+    return response.ok({ message: 'Book added to top books' })
+  }
+
+  async removeFromTopBooks({ auth, params, response }: HttpContext) {
+    const user = await auth.authenticate()
+    const book = await Book.find(params.id)
+    if (!book) {
+      return response.notFound({ message: 'Book not found' })
+    }
+
+    const existingRelation = await user
+      .related('topBooks')
+      .query()
+      .where('book_id', book.id)
+      .first()
+    if (!existingRelation) {
+      return response.notFound({ message: 'Book not found in top books' })
+    }
+
+    await user.related('topBooks').detach([book.id])
+    return response.ok({ message: 'Book removed from top books' })
+  }
 }

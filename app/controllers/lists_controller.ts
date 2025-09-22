@@ -225,13 +225,23 @@ export default class ListsController {
    */
   public async create({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
-    const { name, description, tags, isPublic, backdropImage, ranked } =
-      await request.validateUsing(createSchema)
+    const {
+      name,
+      description,
+      tags,
+      isPublic,
+      backdropMode,
+      backdropColor,
+      backdropImage,
+      ranked,
+    } = await request.validateUsing(createSchema)
     const list = await List.create({
       name,
       description,
       tags,
       isPublic,
+      backdropMode,
+      backdropColor,
       backdropImage,
       ranked,
       userId: user.id,
@@ -266,7 +276,7 @@ export default class ListsController {
   public async update({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
     const payload = await request.validateUsing(updateSchema)
-    const { name, description, tags, isPublic, backdropImage, ranked } = payload
+    const { name, description, tags, isPublic, backdropMode, backdropColor, ranked } = payload
     const { id } = payload.params
 
     const list = await List.findOrFail(id)
@@ -277,7 +287,29 @@ export default class ListsController {
       })
     }
 
-    await list.merge({ name, description, tags, isPublic, backdropImage, ranked }).save()
+    if (backdropMode === 'image') {
+      if (user.plan === 'free') {
+        return response.unauthorized({
+          message: 'You must be a Plus user to use an image as backdrop for a list',
+        })
+      }
+    }
+
+    if (backdropMode === 'color') {
+      list.merge({ backdropImage: null })
+    }
+
+    await list
+      .merge({
+        name,
+        description,
+        tags,
+        isPublic,
+        backdropMode,
+        backdropColor,
+        ranked,
+      })
+      .save()
 
     const updatedList = (
       await List.query().where('id', id).preload('user').preload('bookItems').first()
@@ -495,6 +527,12 @@ export default class ListsController {
     if (list.userId !== user.id) {
       return response.unauthorized({
         message: 'You are not the owner of this list',
+      })
+    }
+
+    if (user.plan === 'free') {
+      return response.unauthorized({
+        message: 'You must be a Plus user to upload an image for a list',
       })
     }
 

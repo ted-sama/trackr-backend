@@ -30,12 +30,6 @@ router.get('/docs', async () => {
   // return AutoSwagger.default.rapidoc("/swagger", "view"); to use RapiDoc instead (pass "view" default, or "read" to change the render-style)
 })
 
-router.get('/', async () => {
-  return {
-    hello: 'world',
-  }
-})
-
 router
   .group(() => {
     router.post('/register', [AuthController, 'register'])
@@ -46,11 +40,17 @@ router
 router
   .group(() => {
     router.get('/', [UsersController, 'me'])
+    router.patch('/', [UsersController, 'update'])
+    router.put('/avatar', [UsersController, 'uploadAvatar'])
+    router.put('/backdrop', [UsersController, 'uploadBackdropImage'])
     router.get('/lists', [UsersController, 'showLists'])
     router.get('/books', [LibraryController, 'index'])
     router.post('/books/:bookId', [LibraryController, 'add'])
     router.delete('/books/:bookId', [LibraryController, 'remove'])
     router.patch('/books/:bookId', [LibraryController, 'update'])
+    router.get('/top', [UsersController, 'showTopBooks'])
+    router.post('/top/:bookId', [LibraryController, 'addToTopBooks'])
+    router.delete('/top/:bookId', [LibraryController, 'removeFromTopBooks'])
   })
   .prefix('me')
 

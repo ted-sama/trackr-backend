@@ -29,6 +29,12 @@ export default class List extends BaseModel {
   declare isMyLibrary: boolean
 
   @column()
+  declare backdropMode: string
+
+  @column()
+  declare backdropColor: string
+
+  @column()
   declare backdropImage: string | null
 
   @column()
