@@ -38,7 +38,7 @@ export default class ListsController {
       relations: {
         owner: {
           fields: {
-            pick: ['id', 'username', 'avatar', 'plan'],
+            pick: ['id', 'username', 'displayName', 'avatar', 'plan'],
           },
         },
       },
@@ -126,7 +126,7 @@ export default class ListsController {
       relations: {
         owner: {
           fields: {
-            pick: ['id', 'username', 'avatar', 'plan'],
+            pick: ['id', 'username', 'displayName', 'avatar', 'plan'],
           },
         },
       },
@@ -159,7 +159,7 @@ export default class ListsController {
       relations: {
         owner: {
           fields: {
-            pick: ['id', 'username', 'avatar', 'plan'],
+            pick: ['id', 'username', 'displayName', 'avatar', 'plan'],
           },
         },
       },
@@ -206,7 +206,7 @@ export default class ListsController {
       relations: {
         owner: {
           fields: {
-            pick: ['id', 'username', 'avatar', 'plan'],
+            pick: ['id', 'username', 'displayName', 'avatar', 'plan'],
           },
         },
       },
@@ -253,7 +253,7 @@ export default class ListsController {
       relations: {
         owner: {
           fields: {
-            pick: ['id', 'username', 'avatar', 'plan'],
+            pick: ['id', 'username', 'displayName', 'avatar', 'plan'],
           },
         },
       },
@@ -317,7 +317,7 @@ export default class ListsController {
       relations: {
         owner: {
           fields: {
-            pick: ['id', 'username', 'avatar', 'plan'],
+            pick: ['id', 'username', 'displayName', 'avatar', 'plan'],
           },
         },
       },

@@ -51,8 +51,17 @@ router
     router.get('/top', [UsersController, 'showTopBooks'])
     router.post('/top/:bookId', [LibraryController, 'addToTopBooks'])
     router.delete('/top/:bookId', [LibraryController, 'removeFromTopBooks'])
+    router.put('/top/reorder', [UsersController, 'reorderTopBooks'])
   })
   .prefix('me')
+
+router
+  .group(() => {
+    router.get('/:username', [UsersController, 'show'])
+    router.get('/:username/top', [UsersController, 'showUserTopBooks'])
+    router.get('/:username/lists', [UsersController, 'showUserLists'])
+  })
+  .prefix('users')
 
 router
   .group(() => {

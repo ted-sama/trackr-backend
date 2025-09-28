@@ -9,3 +9,25 @@ export const updateLibraryValidator = vine.compile(
     currentVolume: vine.number().min(0).optional(),
   })
 )
+
+export const addToTopBooksValidator = vine.compile(
+  vine.object({
+    params: vine.object({
+      bookId: vine.number().positive(),
+    }),
+  })
+)
+
+export const removeFromTopBooksValidator = vine.compile(
+  vine.object({
+    params: vine.object({
+      bookId: vine.number().positive(),
+    }),
+  })
+)
+
+export const reorderTopBooksValidator = vine.compile(
+  vine.object({
+    bookIds: vine.array(vine.number().positive()),
+  })
+)

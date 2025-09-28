@@ -1,8 +1,13 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Book from '#models/book'
-import { updateLibraryValidator } from '#validators/library'
+import {
+  addToTopBooksValidator,
+  removeFromTopBooksValidator,
+  updateLibraryValidator,
+} from '#validators/library'
 import BookTracking from '#models/book_tracking'
 import { DateTime } from 'luxon'
+import db from '@adonisjs/lucid/services/db'
 
 export default class LibraryController {
   /**
@@ -134,9 +139,10 @@ export default class LibraryController {
     return response.ok(updatedBookTracking)
   }
 
-  async addToTopBooks({ auth, params, response }: HttpContext) {
+  async addToTopBooks({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
-    const book = await Book.find(params.id)
+    const { params } = await request.validateUsing(addToTopBooksValidator)
+    const book = await Book.find(params.bookId)
     if (!book) {
       return response.notFound({ message: 'Book not found' })
     }
@@ -151,17 +157,29 @@ export default class LibraryController {
     }
 
     const topBooksCount = await user.related('topBooks').query().count('* as total')
-    if (topBooksCount[0].$extras.total >= 3) {
-      return response.conflict({ message: 'You can only have 3 top books' })
+    const totalTopBooks = Number(topBooksCount[0].$extras.total ?? 0)
+
+    if (totalTopBooks >= 5) {
+      return response.conflict({ message: 'You can only have 5 top books' })
     }
 
-    await user.related('topBooks').attach([book.id])
+    const nextPosition = totalTopBooks + 1
+
+    await user.related('topBooks').attach({
+      [book.id]: {
+        position: nextPosition,
+        created_at: new Date(),
+        updated_at: new Date(),
+      },
+    })
+
     return response.ok({ message: 'Book added to top books' })
   }
 
-  async removeFromTopBooks({ auth, params, response }: HttpContext) {
+  async removeFromTopBooks({ auth, request, response }: HttpContext) {
+    const { params } = await request.validateUsing(removeFromTopBooksValidator)
     const user = await auth.authenticate()
-    const book = await Book.find(params.id)
+    const book = await Book.find(params.bookId)
     if (!book) {
       return response.notFound({ message: 'Book not found' })
     }
@@ -176,6 +194,14 @@ export default class LibraryController {
     }
 
     await user.related('topBooks').detach([book.id])
+
+    const removedPosition = Number(existingRelation.$extras.pivot_position ?? 0)
+
+    await db.rawQuery(
+      'UPDATE users_top_books SET position = position - 1, updated_at = ? WHERE user_id = ? AND position > ?',
+      [new Date(), user.id, removedPosition]
+    )
+
     return response.ok({ message: 'Book removed from top books' })
   }
 }

@@ -1,8 +1,16 @@
 import type { HttpContext } from '@adonisjs/core/http'
-import User from '#models/user'
 import List from '#models/list'
-import { updateSchema, updateBackdropSchema, updateAvatarSchema } from '#validators/user'
+import {
+  showSchema,
+  updateSchema,
+  updateBackdropSchema,
+  updateAvatarSchema,
+  showListsQuerySchema,
+} from '#validators/user'
+import { reorderTopBooksValidator } from '#validators/library'
 import { cuid } from '@adonisjs/core/helpers'
+import User from '#models/user'
+import db from '@adonisjs/lucid/services/db'
 
 export default class UsersController {
   /**
@@ -17,9 +25,116 @@ export default class UsersController {
     return response.ok(user)
   }
 
+  async show({ request, response }: HttpContext) {
+    const { params } = await request.validateUsing(showSchema)
+    const { username } = params
+    const userRecord = await User.query().where('username', username).first()
+    const user = userRecord?.serialize({
+      fields: {
+        pick: [
+          'id',
+          'username',
+          'displayName',
+          'avatar',
+          'plan',
+          'backdropMode',
+          'backdropColor',
+          'backdropImage',
+        ],
+      },
+    })
+
+    if (!user) {
+      return response.notFound({
+        message: 'User not found',
+      })
+    }
+
+    return response.ok(user)
+  }
+
+  async showUserTopBooks({ request, response }: HttpContext) {
+    const { params } = await request.validateUsing(showSchema)
+    const { username } = params
+
+    const userRecord = await User.query().where('username', username).first()
+
+    if (!userRecord) {
+      return response.notFound({
+        message: 'User not found',
+      })
+    }
+
+    const topBooks = await userRecord
+      .related('topBooks')
+      .query()
+      .orderBy('users_top_books.position', 'asc')
+
+    return response.ok(topBooks)
+  }
+
+  async showUserLists({ request, response }: HttpContext) {
+    const { params } = await request.validateUsing(showSchema)
+    const { username } = params
+    const {
+      page = 1,
+      limit = 10,
+      sort,
+      order,
+      q,
+    } = await request.validateUsing(showListsQuerySchema)
+
+    const userRecord = await User.query().where('username', username).first()
+
+    if (!userRecord) {
+      return response.notFound({
+        message: 'User not found',
+      })
+    }
+
+    const queryBuilder = List.query()
+      .where('user_id', userRecord.id)
+      .where('is_my_library', false)
+      .where('is_public', true)
+
+    if (q && q.trim()) {
+      const normalizedQuery = q.trim().toLowerCase()
+      queryBuilder.where((qb) => {
+        qb.whereRaw('LOWER(name) = ?', [normalizedQuery])
+          .orWhereILike('name', `%${normalizedQuery}%`)
+          .orWhereRaw('LOWER(description) = ?', [normalizedQuery])
+          .orWhereILike('description', `%${normalizedQuery}%`)
+          .orWhereRaw('EXISTS (SELECT 1 FROM unnest(tags) AS tag WHERE LOWER(tag) = ?)', [
+            normalizedQuery,
+          ])
+          .orWhereRaw('EXISTS (SELECT 1 FROM unnest(tags) AS tag WHERE LOWER(tag) LIKE ?)', [
+            `%${normalizedQuery}%`,
+          ])
+          .orWhereILike('search_text', `%${normalizedQuery}%`)
+      })
+    }
+
+    const sortField = sort ?? 'created_at'
+    const sortOrder = order ?? 'desc'
+    queryBuilder.orderBy(sortField, sortOrder)
+
+    const paginated = await queryBuilder.preload('user').preload('bookItems').paginate(page, limit)
+    const lists = paginated.serialize({
+      relations: {
+        owner: {
+          fields: {
+            pick: ['id', 'username', 'displayName', 'avatar', 'plan'],
+          },
+        },
+      },
+    })
+
+    return response.ok(lists)
+  }
+
   async update({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
-    const { username, backdropMode, backdropColor, backdropImage } =
+    const { username, displayName, backdropMode, backdropColor, backdropImage } =
       await request.validateUsing(updateSchema)
 
     if (backdropMode === 'image') {
@@ -30,7 +145,7 @@ export default class UsersController {
       }
     }
 
-    await user.merge({ username, backdropMode, backdropColor, backdropImage }).save()
+    await user.merge({ username, displayName, backdropMode, backdropColor, backdropImage }).save()
     return response.ok(user)
   }
 
@@ -79,24 +194,57 @@ export default class UsersController {
    * @tag Users
    * @description Returns a paginated list of the authenticated user's lists
    * @paramQuery page - Page number for pagination - @type(number)
-   * @paramQuery limit - Number of items per page - @type(number)
+   * @paramQuery limit - Number of items per page (max 100) - @type(number)
+   * @paramQuery sort - Sort field: created_at | name - @type(string)
+   * @paramQuery order - Sort direction: asc | desc - @type(string)
+   * @paramQuery q - Search term (filters by name/description/tags) - @type(string)
+   * @responseHeader X-Total - Total number of items
+   * @responseHeader X-Per-Page - Items per page
+   * @responseHeader X-Current-Page - Current page number
+   * @responseHeader X-Last-Page - Last page number
    * @responseBody 200 - <List[]>.with(owner, bookItems).paginated() - User's lists with pagination
    * @responseBody 401 - Unauthorized
    */
   async showLists({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
-    const { page = 1, limit = 10 } = request.qs()
-    const lists = (
-      await List.query()
-        .where('user_id', user.id)
-        .preload('user')
-        .preload('bookItems')
-        .paginate(page, limit)
-    ).serialize({
+    const {
+      page = 1,
+      limit = 10,
+      sort,
+      order,
+      q,
+    } = await request.validateUsing(showListsQuerySchema)
+
+    const queryBuilder = List.query().where('user_id', user.id)
+
+    if (q && q.trim()) {
+      const normalizedQuery = q.trim().toLowerCase()
+      queryBuilder.where((qb) => {
+        qb.whereRaw('LOWER(name) = ?', [normalizedQuery])
+          .orWhereILike('name', `%${normalizedQuery}%`)
+          .orWhereRaw('LOWER(description) = ?', [normalizedQuery])
+          .orWhereILike('description', `%${normalizedQuery}%`)
+          .orWhereRaw('EXISTS (SELECT 1 FROM unnest(tags) AS tag WHERE LOWER(tag) = ?)', [
+            normalizedQuery,
+          ])
+          .orWhereRaw('EXISTS (SELECT 1 FROM unnest(tags) AS tag WHERE LOWER(tag) LIKE ?)', [
+            `%${normalizedQuery}%`,
+          ])
+          .orWhereILike('search_text', `%${normalizedQuery}%`)
+      })
+    }
+
+    // Default sort: created_at desc
+    const sortField = sort ?? 'created_at'
+    const sortOrder = order ?? 'desc'
+    queryBuilder.orderBy(sortField, sortOrder)
+
+    const paginated = await queryBuilder.preload('user').preload('bookItems').paginate(page, limit)
+    const lists = paginated.serialize({
       relations: {
         owner: {
           fields: {
-            pick: ['id', 'username', 'avatar', 'plan'],
+            pick: ['id', 'username', 'displayName', 'avatar', 'plan'],
           },
         },
       },
@@ -106,7 +254,35 @@ export default class UsersController {
 
   async showTopBooks({ auth, response }: HttpContext) {
     const user = await auth.authenticate()
-    const topBooks = await user.related('topBooks').query()
+    const topBooks = await user
+      .related('topBooks')
+      .query()
+      .orderBy('users_top_books.position', 'asc')
     return response.ok(topBooks)
+  }
+
+  async reorderTopBooks({ auth, request, response }: HttpContext) {
+    const user = await auth.authenticate()
+    const { bookIds } = await request.validateUsing(reorderTopBooksValidator)
+
+    for (const [index, bookId] of bookIds.entries()) {
+      const existingRelation = await db
+        .from('users_top_books')
+        .where('user_id', user.id)
+        .where('book_id', bookId)
+        .first()
+
+      if (!existingRelation) {
+        return response.notFound({ message: `Book ID: ${bookId} not found in top books` })
+      }
+
+      await db
+        .from('users_top_books')
+        .where('user_id', user.id)
+        .where('book_id', bookId)
+        .update({ position: index + 1, updated_at: new Date() })
+    }
+
+    return response.noContent()
   }
 }

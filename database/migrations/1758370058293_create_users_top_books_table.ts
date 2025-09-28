@@ -6,10 +6,11 @@ export default class extends BaseSchema {
   async up() {
     this.schema.createTable(this.tableName, (table) => {
       table.increments('id')
-      table.uuid('user_id').references('users.id')
-      table.bigInteger('book_id').unsigned().references('books.id')
-      table.timestamp('created_at')
-      table.timestamp('updated_at')
+      table.uuid('user_id').references('users.id').notNullable()
+      table.bigInteger('book_id').unsigned().references('books.id').notNullable()
+      table.integer('position').notNullable()
+      table.timestamp('created_at').notNullable()
+      table.timestamp('updated_at').notNullable()
     })
   }
 

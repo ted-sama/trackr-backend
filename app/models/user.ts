@@ -38,6 +38,9 @@ export default class User extends compose(BaseModel, AuthFinder) {
   declare username: string
 
   @column()
+  declare displayName: string | null
+
+  @column()
   declare email: string
 
   @column({ serializeAs: null })
@@ -46,7 +49,7 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column()
   declare avatar: string | null
 
-  @column()
+  @column({ serializeAs: null })
   declare role: 'admin' | 'user'
 
   @column()
@@ -78,6 +81,8 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
   @manyToMany(() => Book, {
     pivotTable: 'users_top_books',
+    pivotColumns: ['position', 'created_at', 'updated_at'],
+    serializeAs: null,
   })
   declare topBooks: ManyToMany<typeof Book>
 
