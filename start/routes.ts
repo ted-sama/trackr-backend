@@ -42,6 +42,7 @@ router
     router.get('/', [UsersController, 'me'])
     router.patch('/', [UsersController, 'update'])
     router.put('/avatar', [UsersController, 'uploadAvatar'])
+    router.delete('/avatar', [UsersController, 'deleteAvatar'])
     router.put('/backdrop', [UsersController, 'uploadBackdropImage'])
     router.get('/lists', [UsersController, 'showLists'])
     router.get('/books', [LibraryController, 'index'])

@@ -169,6 +169,12 @@ export default class UsersController {
     return response.accepted({})
   }
 
+  async deleteAvatar({ auth, response }: HttpContext) {
+    const user = await auth.authenticate()
+    await user.merge({ avatar: null }).save()
+    return response.accepted({})
+  }
+
   async uploadBackdropImage({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
     const { backdrop } = await request.validateUsing(updateBackdropSchema)
