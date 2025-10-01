@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Book from '#models/book'
+import AppError from '#exceptions/app_error'
 import {
   addToTopBooksValidator,
   removeFromTopBooksValidator,
@@ -39,6 +40,7 @@ export default class LibraryController {
    * @description Adds a book to the user's library for tracking
    * @paramPath bookId - Book ID - @type(number) @required
    * @responseBody 201 - {"message": "string", "bookId": "number"} - Book added to library
+   * @responseBody 409 - {"code": "BOOK_ALREADY_IN_LIBRARY", "message": "Book already in library"} - Book already in library
    * @responseBody 401 - Unauthorized
    * @responseBody 404 - Book not found
    * @responseBody 409 - Book already in library
@@ -54,7 +56,10 @@ export default class LibraryController {
       .first()
 
     if (existingTracking) {
-      return response.conflict({ message: 'Book already in library' })
+      throw new AppError('Book already in library', {
+        status: 409,
+        code: 'BOOK_ALREADY_IN_LIBRARY',
+      })
     }
 
     await user.related('bookTrackings').create({ bookId: book.id })
@@ -69,7 +74,7 @@ export default class LibraryController {
    * @paramPath bookId - Book ID - @type(number) @required
    * @responseBody 204 - Book removed from library
    * @responseBody 401 - Unauthorized
-   * @responseBody 404 - Book not found in library
+   * @responseBody 404 - {"code": "BOOK_NOT_FOUND_IN_LIBRARY", "message": "Book not found in library"} - Book not found in library
    */
   async remove({ auth, params, response }: HttpContext) {
     const user = await auth.authenticate()
@@ -80,6 +85,13 @@ export default class LibraryController {
       .query()
       .where('book_id', book.id)
       .firstOrFail()
+
+    if (!bookTracking) {
+      throw new AppError('Book not found in library', {
+        status: 404,
+        code: 'BOOK_NOT_FOUND_IN_LIBRARY',
+      })
+    }
 
     await bookTracking.delete()
 
@@ -94,7 +106,7 @@ export default class LibraryController {
    * @requestBody <updateLibraryValidator> - Book tracking update data
    * @responseBody 200 - <BookTracking> - Updated book tracking
    * @responseBody 401 - Unauthorized
-   * @responseBody 404 - Book not found in library
+   * @responseBody 404 - {"code": "BOOK_NOT_FOUND_IN_LIBRARY", "message": "Book not found in library"} - Book not found in library
    * @responseBody 422 - Validation error
    */
   async update({ auth, params, request, response }: HttpContext) {
@@ -108,6 +120,13 @@ export default class LibraryController {
       .query()
       .where('book_id', book.id)
       .firstOrFail()
+
+    if (!bookTracking) {
+      throw new AppError('Book not found in library', {
+        status: 404,
+        code: 'BOOK_NOT_FOUND_IN_LIBRARY',
+      })
+    }
 
     if (status === 'reading' && bookTracking.status !== 'reading') {
       bookTracking.merge({ startDate: DateTime.now() })
@@ -144,7 +163,10 @@ export default class LibraryController {
     const { params } = await request.validateUsing(addToTopBooksValidator)
     const book = await Book.find(params.bookId)
     if (!book) {
-      return response.notFound({ message: 'Book not found' })
+      throw new AppError('Book not found', {
+        status: 404,
+        code: 'BOOK_NOT_FOUND',
+      })
     }
 
     const existingRelation = await user
@@ -153,14 +175,20 @@ export default class LibraryController {
       .where('book_id', book.id)
       .first()
     if (existingRelation) {
-      return response.conflict({ message: 'Book already in top books' })
+      throw new AppError('Book already in top books', {
+        status: 409,
+        code: 'BOOK_ALREADY_IN_TOP',
+      })
     }
 
     const topBooksCount = await user.related('topBooks').query().count('* as total')
     const totalTopBooks = Number(topBooksCount[0].$extras.total ?? 0)
 
     if (totalTopBooks >= 5) {
-      return response.conflict({ message: 'You can only have 5 top books' })
+      throw new AppError('You can only have 5 top books', {
+        status: 409,
+        code: 'BOOKS_TOP_LIMIT_REACHED',
+      })
     }
 
     const nextPosition = totalTopBooks + 1
@@ -181,7 +209,10 @@ export default class LibraryController {
     const user = await auth.authenticate()
     const book = await Book.find(params.bookId)
     if (!book) {
-      return response.notFound({ message: 'Book not found' })
+      throw new AppError('Book not found', {
+        status: 404,
+        code: 'BOOK_NOT_FOUND',
+      })
     }
 
     const existingRelation = await user
@@ -190,7 +221,10 @@ export default class LibraryController {
       .where('book_id', book.id)
       .first()
     if (!existingRelation) {
-      return response.notFound({ message: 'Book not found in top books' })
+      throw new AppError('Book not found in top books', {
+        status: 404,
+        code: 'BOOK_NOT_FOUND_IN_TOP',
+      })
     }
 
     await user.related('topBooks').detach([book.id])

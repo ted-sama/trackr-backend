@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Book from '#models/book'
+import AppError from '#exceptions/app_error'
 import db from '@adonisjs/lucid/services/db'
 import { aiTranslate } from '#helpers/ai_translate'
 import { getRecommendations } from '#services/recommandations'
@@ -78,12 +79,15 @@ export default class BooksController {
    * @description Returns a single book by its ID with all related data
    * @paramPath id - Book ID - @type(number) @required
    * @responseBody 200 - <Book>.with(categories, chapterList, lists, bookTrackings) - Book details
-   * @responseBody 404 - Book not found
+   * @responseBody 404 - {"code": "BOOK_NOT_FOUND", "message": "Book not found"} - Book not found
    */
   async show({ params, response }: HttpContext) {
     const book = await Book.find(params.id)
     if (!book) {
-      return response.notFound({ message: 'Book not found' })
+      throw new AppError('Book not found', {
+        status: 404,
+        code: 'BOOK_NOT_FOUND',
+      })
     }
 
     // Translate the book's description to fr if not present in db
@@ -101,7 +105,10 @@ export default class BooksController {
     const query = request.input('q')
 
     if (!query) {
-      return response.badRequest({ message: 'Search query is required' })
+      throw new AppError('Search query is required', {
+        status: 400,
+        code: 'BOOK_SEARCH_QUERY_REQUIRED',
+      })
     }
 
     const normalizedQuery = query.trim().toLowerCase()
@@ -163,7 +170,10 @@ export default class BooksController {
   async getBySameAuthor({ params, response }: HttpContext) {
     const book = await Book.find(params.id)
     if (!book) {
-      return response.notFound({ message: 'Book not found' })
+      throw new AppError('Book not found', {
+        status: 404,
+        code: 'BOOK_NOT_FOUND',
+      })
     }
 
     if (book.author) {

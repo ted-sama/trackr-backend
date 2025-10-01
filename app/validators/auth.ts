@@ -3,8 +3,8 @@ import vine from '@vinejs/vine'
 export const registerSchema = vine.compile(
   vine.object({
     email: vine.string().email().trim(),
-    displayName: vine.string().toLowerCase().trim(),
-    username: vine.string().minLength(3).trim(),
+    displayName: vine.string().trim(),
+    username: vine.string().toLowerCase().trim().minLength(3),
     password: vine.string().minLength(8).trim(),
   })
 )

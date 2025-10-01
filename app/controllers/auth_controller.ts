@@ -1,5 +1,5 @@
 import User from '#models/user'
-import hash from '@adonisjs/core/services/hash'
+import AppError from '#exceptions/app_error'
 import type { HttpContext } from '@adonisjs/core/http'
 import { loginSchema, registerSchema } from '#validators/auth'
 
@@ -11,14 +11,24 @@ export default class AuthController {
    * @requestBody <registerSchema> - User registration data
    * @responseBody 200 - <User>.exclude(password) - Successfully registered user
    * @responseBody 400 - Validation error
-   * @responseBody 422 - User already exists
+   * @responseBody 409 - {"code": "AUTH_USER_ALREADY_EXISTS", "message": "User already exists"} - User already exists
    */
   async register({ request, response }: HttpContext) {
-    const { email, username, password } = await registerSchema.validate(request.body())
+    const { email, username, displayName, password } = await registerSchema.validate(request.body())
+
+    const existingUser = await User.findBy('email', email)
+
+    if (existingUser) {
+      throw new AppError('User already exists', {
+        status: 409,
+        code: 'AUTH_USER_ALREADY_EXISTS',
+      })
+    }
 
     const user = await User.create({
       email,
       username,
+      displayName,
       password,
     })
 
@@ -31,7 +41,7 @@ export default class AuthController {
    * @description Authenticates user with email and password, returns access token
    * @requestBody <loginSchema> - User login credentials
    * @responseBody 200 - {"type": "bearer", "name": "trk_", "token": "string", "abilities": ["*"], "lastUsedAt": "string", "expiresAt": "string"} - Authentication token
-   * @responseBody 400 - Invalid credentials
+   * @responseBody 400 - {"code": "AUTH_INVALID_CREDENTIALS", "message": "Invalid credentials"} - Invalid credentials
    * @responseBody 422 - Validation error
    */
   async login({ request, response }: HttpContext) {
@@ -40,7 +50,10 @@ export default class AuthController {
     const user = await User.verifyCredentials(email, password)
 
     if (!user) {
-      return response.abort('Invalid credentials')
+      throw new AppError('Invalid credentials', {
+        status: 400,
+        code: 'AUTH_INVALID_CREDENTIALS',
+      })
     }
 
     const token = await User.accessTokens.create(user)

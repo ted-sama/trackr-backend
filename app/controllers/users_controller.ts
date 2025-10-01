@@ -11,6 +11,7 @@ import { reorderTopBooksValidator } from '#validators/library'
 import { cuid } from '@adonisjs/core/helpers'
 import User from '#models/user'
 import db from '@adonisjs/lucid/services/db'
+import AppError from '#exceptions/app_error'
 
 export default class UsersController {
   /**
@@ -45,8 +46,9 @@ export default class UsersController {
     })
 
     if (!user) {
-      return response.notFound({
-        message: 'User not found',
+      throw new AppError('User not found', {
+        status: 404,
+        code: 'USER_NOT_FOUND',
       })
     }
 
@@ -60,8 +62,9 @@ export default class UsersController {
     const userRecord = await User.query().where('username', username).first()
 
     if (!userRecord) {
-      return response.notFound({
-        message: 'User not found',
+      throw new AppError('User not found', {
+        status: 404,
+        code: 'USER_NOT_FOUND',
       })
     }
 
@@ -87,8 +90,9 @@ export default class UsersController {
     const userRecord = await User.query().where('username', username).first()
 
     if (!userRecord) {
-      return response.notFound({
-        message: 'User not found',
+      throw new AppError('User not found', {
+        status: 404,
+        code: 'USER_NOT_FOUND',
       })
     }
 
@@ -139,8 +143,9 @@ export default class UsersController {
 
     if (backdropMode === 'image') {
       if (user.plan === 'free') {
-        return response.unauthorized({
-          message: 'You must be a Plus user to use an image as backdrop for your profile',
+        throw new AppError('You must be a Plus user to use an image as backdrop for your profile', {
+          status: 401,
+          code: 'USER_PLUS_REQUIRED',
         })
       }
     }
@@ -154,11 +159,17 @@ export default class UsersController {
     const { avatar } = await request.validateUsing(updateAvatarSchema)
 
     if (!avatar) {
-      return response.badRequest({ message: 'No image provided' })
+      throw new AppError('No image provided', {
+        status: 400,
+        code: 'USER_AVATAR_NO_IMAGE_PROVIDED',
+      })
     }
 
     if (!avatar.isValid) {
-      return response.badRequest({ errors: avatar.errors })
+      throw new AppError('Invalid image upload', {
+        status: 400,
+        code: 'USER_AVATAR_INVALID',
+      })
     }
 
     const key = `images/user/avatar/${cuid()}.${avatar.extname}`
@@ -180,11 +191,17 @@ export default class UsersController {
     const { backdrop } = await request.validateUsing(updateBackdropSchema)
 
     if (!backdrop) {
-      return response.badRequest({ message: 'No image provided' })
+      throw new AppError('No image provided', {
+        status: 400,
+        code: 'USER_BACKDROP_NO_IMAGE_PROVIDED',
+      })
     }
 
     if (!backdrop.isValid) {
-      return response.badRequest({ errors: backdrop.errors })
+      throw new AppError('Invalid image upload', {
+        status: 400,
+        code: 'USER_BACKDROP_INVALID',
+      })
     }
 
     const key = `images/user/backdrop/${cuid()}.${backdrop.extname}`
@@ -279,7 +296,10 @@ export default class UsersController {
         .first()
 
       if (!existingRelation) {
-        return response.notFound({ message: `Book ID: ${bookId} not found in top books` })
+        throw new AppError(`Book ID: ${bookId} not found in top books`, {
+          status: 404,
+          code: 'USER_TOP_NOT_FOUND',
+        })
       }
 
       await db

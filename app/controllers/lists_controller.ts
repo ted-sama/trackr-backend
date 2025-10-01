@@ -1,5 +1,6 @@
 import Book from '#models/book'
 import List from '#models/list'
+import AppError from '#exceptions/app_error'
 import db from '@adonisjs/lucid/services/db'
 import {
   addBookSchema,
@@ -62,7 +63,10 @@ export default class ListsController {
     const query = request.input('q')
 
     if (!query) {
-      return response.badRequest({ message: 'Search query is required' })
+      throw new AppError('Search query is required', {
+        status: 400,
+        code: 'LIST_SEARCH_QUERY_MISSING',
+      })
     }
 
     const normalizedQuery = query.trim().toLowerCase()
@@ -166,8 +170,9 @@ export default class ListsController {
     })
 
     if (!list) {
-      return response.notFound({
-        message: 'List not found',
+      throw new AppError('List not found', {
+        status: 404,
+        code: 'LIST_NOT_FOUND',
       })
     }
 
@@ -175,8 +180,9 @@ export default class ListsController {
       return response.ok(list)
     }
 
-    return response.unauthorized({
-      message: 'You are not authorized to view this list',
+    throw new AppError('You are not authorized to view this list', {
+      status: 401,
+      code: 'LIST_VIEW_FORBIDDEN',
     })
   }
 
@@ -282,15 +288,17 @@ export default class ListsController {
     const list = await List.findOrFail(id)
 
     if (list.userId !== user.id) {
-      return response.unauthorized({
-        message: 'You are not the owner of this list',
+      throw new AppError('You are not the owner of this list', {
+        status: 401,
+        code: 'LIST_NOT_OWNER',
       })
     }
 
     if (backdropMode === 'image') {
       if (user.plan === 'free') {
-        return response.unauthorized({
-          message: 'You must be a Plus user to use an image as backdrop for a list',
+        throw new AppError('You must be a Plus user to use an image as backdrop for a list', {
+          status: 401,
+          code: 'LIST_PLUS_REQUIRED',
         })
       }
     }
@@ -342,8 +350,9 @@ export default class ListsController {
     const list = await List.findOrFail(id)
 
     if (list.userId !== user.id) {
-      return response.unauthorized({
-        message: 'You are not the owner of this list',
+      throw new AppError('You are not the owner of this list', {
+        status: 401,
+        code: 'LIST_NOT_OWNER',
       })
     }
 
@@ -373,8 +382,9 @@ export default class ListsController {
     const list = await List.findOrFail(id)
 
     if (list.userId !== user.id) {
-      return response.unauthorized({
-        message: 'You are not the owner of this list',
+      throw new AppError('You are not the owner of this list', {
+        status: 401,
+        code: 'LIST_NOT_OWNER',
       })
     }
 
@@ -387,8 +397,9 @@ export default class ListsController {
       .where('book_id', bookId)
       .first()
     if (existingRelation) {
-      return response.conflict({
-        message: 'Book is already in this list',
+      throw new AppError('Book is already in this list', {
+        status: 409,
+        code: 'LIST_BOOK_ALREADY_EXISTS',
       })
     }
 
@@ -444,8 +455,9 @@ export default class ListsController {
       .first()
 
     if (!listBookEntry) {
-      return response.notFound({
-        message: 'Book not found in this list',
+      throw new AppError('Book not found in this list', {
+        status: 404,
+        code: 'LIST_BOOK_NOT_FOUND',
       })
     }
 
@@ -480,8 +492,9 @@ export default class ListsController {
     const list = await List.findOrFail(id)
 
     if (list.userId !== user.id) {
-      return response.unauthorized({
-        message: 'You are not the owner of this list',
+      throw new AppError('You are not the owner of this list', {
+        status: 401,
+        code: 'LIST_NOT_OWNER',
       })
     }
 
@@ -492,8 +505,9 @@ export default class ListsController {
         .where('book_id', bookId)
         .first()
       if (!listBookEntry) {
-        return response.notFound({
-          message: `Book ID: ${bookId} not found in this list`,
+        throw new AppError(`Book ID: ${bookId} not found in this list`, {
+          status: 404,
+          code: 'LIST_BOOK_NOT_FOUND',
         })
       }
       await db.rawQuery('UPDATE list_books SET item_number = ? WHERE list_id = ? AND book_id = ?', [
@@ -525,23 +539,31 @@ export default class ListsController {
     const list = await List.findOrFail(id)
 
     if (list.userId !== user.id) {
-      return response.unauthorized({
-        message: 'You are not the owner of this list',
+      throw new AppError('You are not the owner of this list', {
+        status: 401,
+        code: 'LIST_NOT_OWNER',
       })
     }
 
     if (user.plan === 'free') {
-      return response.unauthorized({
-        message: 'You must be a Plus user to upload an image for a list',
+      throw new AppError('You must be a Plus user to upload an image for a list', {
+        status: 401,
+        code: 'LIST_PREMIUM_REQUIRED',
       })
     }
 
     if (!backdrop) {
-      return response.badRequest({ message: 'No image provided' })
+      throw new AppError('No image provided', {
+        status: 400,
+        code: 'LIST_BACKDROP_MISSING',
+      })
     }
 
     if (!backdrop.isValid) {
-      return response.badRequest({ errors: backdrop.errors })
+      throw new AppError('Invalid image upload', {
+        status: 400,
+        code: 'LIST_BACKDROP_INVALID',
+      })
     }
 
     const key = `images/list/backdrop/${cuid()}.${backdrop.extname}`

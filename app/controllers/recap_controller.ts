@@ -16,7 +16,7 @@ export default class RecapController {
   async recap({ params, response }: HttpContext) {
     try {
       const { id: bookId, chapterId } = params
-      
+
       // Verify book exists
       const book = await Book.find(bookId)
       if (!book) {

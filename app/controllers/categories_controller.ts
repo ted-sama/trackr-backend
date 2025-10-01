@@ -1,5 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import Category from '#models/category'
+import AppError from '#exceptions/app_error'
 
 export default class CategoriesController {
   /**
@@ -25,13 +26,16 @@ export default class CategoriesController {
    * @description Returns a single category by its ID with all associated books
    * @paramPath id - Category ID - @type(number) @required
    * @responseBody 200 - <Category>.with(books) - Category details with associated books
-   * @responseBody 404 - Category not found
+   * @responseBody 404 - {"code": "CATEGORY_NOT_FOUND", "message": "Category not found"} - Category not found
    */
   async show({ params, response }: HttpContext) {
     const category = await Category.query().where('id', params.id).preload('books').first()
 
     if (!category) {
-      return response.notFound({ message: 'Category not found' })
+      throw new AppError('Category not found', {
+        status: 404,
+        code: 'CATEGORY_NOT_FOUND',
+      })
     }
     return response.ok(category)
   }
