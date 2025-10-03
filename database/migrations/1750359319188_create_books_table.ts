@@ -14,7 +14,7 @@ export default class extends BaseSchema {
       table.json('tags').nullable()
       table.integer('release_year').nullable()
       table.integer('end_year').nullable()
-      table.string('author').nullable()
+      table.text('author').nullable()
       table.text('description').nullable()
       table.text('description_fr').nullable()
       table.string('status').notNullable()
