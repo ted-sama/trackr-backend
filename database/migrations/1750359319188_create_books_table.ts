@@ -6,7 +6,7 @@ export default class extends BaseSchema {
   async up() {
     this.schema.createTable(this.tableName, (table) => {
       table.increments('id')
-      table.string('title').notNullable()
+      table.text('title').notNullable()
       table.string('cover_image').nullable()
       table.string('type').nullable()
       table.decimal('rating', 3, 2).nullable()
