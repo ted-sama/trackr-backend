@@ -2,7 +2,6 @@ import { DateTime } from 'luxon'
 import { BaseModel, column, manyToMany, hasMany } from '@adonisjs/lucid/orm'
 import type { ManyToMany, HasMany } from '@adonisjs/lucid/types/relations'
 import Category from '#models/category'
-import Chapter from '#models/chapter'
 import List from '#models/list'
 import BookTracking from '#models/book_tracking'
 
@@ -82,9 +81,6 @@ export default class Book extends BaseModel {
     pivotTable: 'category_books',
   })
   declare categories: ManyToMany<typeof Category>
-
-  @hasMany(() => Chapter)
-  declare chapterList: HasMany<typeof Chapter>
 
   @manyToMany(() => List, {
     pivotTable: 'list_books',

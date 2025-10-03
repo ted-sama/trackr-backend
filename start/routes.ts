@@ -96,9 +96,3 @@ router
     router.put('/:id/backdrop', [ListsController, 'uploadBackdropImage'])
   })
   .prefix('lists')
-
-router
-  .group(() => {
-    router.get('/', [BooksController, 'recommendations'])
-  })
-  .prefix('recommendations')

@@ -10,11 +10,16 @@ export default class extends BaseSchema {
 
     // Créer une fonction IMMUTABLE pour concaténer les champs de recherche des listes
     await this.schema.raw(`
-      CREATE OR REPLACE FUNCTION concat_list_search_fields(p_name text, p_description text, p_tags text[])
+      CREATE OR REPLACE FUNCTION concat_list_search_fields(p_name text, p_description text, p_tags json)
       RETURNS text AS $$
-        SELECT p_name || ' ' || 
-               COALESCE(p_description, '') || ' ' || 
-               COALESCE(array_to_string(p_tags, ' '), '');
+        SELECT concat_ws(' ',
+          p_name,
+          COALESCE(p_description, ''),
+          (
+            SELECT string_agg(elem, ' ')
+            FROM jsonb_array_elements_text(COALESCE(p_tags::jsonb, '[]'::jsonb)) AS elem
+          )
+        );
       $$ LANGUAGE sql IMMUTABLE;
     `)
 
@@ -56,6 +61,6 @@ export default class extends BaseSchema {
     `)
 
     // Supprimer la fonction personnalisée
-    await this.schema.raw('DROP FUNCTION IF EXISTS concat_list_search_fields(text, text, text[]);')
+    await this.schema.raw('DROP FUNCTION IF EXISTS concat_list_search_fields(text, text, json);')
   }
 }

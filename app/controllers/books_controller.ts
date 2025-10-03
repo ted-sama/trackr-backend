@@ -3,7 +3,6 @@ import Book from '#models/book'
 import AppError from '#exceptions/app_error'
 import db from '@adonisjs/lucid/services/db'
 import { aiTranslate } from '#helpers/ai_translate'
-import { getRecommendations } from '#services/recommandations'
 
 export default class BooksController {
   /**
@@ -187,23 +186,5 @@ export default class BooksController {
     }
 
     return response.ok([])
-  }
-
-  async recommendations({ auth, response }: HttpContext) {
-    const user = await auth.authenticate()
-
-    const recommendedBookIds = await getRecommendations(user.id)
-
-    // Create array literal for SQL
-    const arrayLiteral = recommendedBookIds.map((id: number) => String(id)).join(',')
-
-    const recommendedBooks = await Book.query()
-      .whereIn(
-        'id',
-        recommendedBookIds.map((id: number) => String(id))
-      )
-      .orderByRaw(`ARRAY_POSITION(ARRAY[${arrayLiteral}]::bigint[], id) ASC`)
-
-    return response.ok(recommendedBooks)
   }
 }
