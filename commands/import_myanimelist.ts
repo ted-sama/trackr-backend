@@ -1,5 +1,6 @@
 import { BaseCommand } from '@adonisjs/core/ace'
 import type { CommandOptions } from '@adonisjs/core/types/ace'
+import env from '#start/env'
 import axios from 'axios'
 import { Pool } from 'pg'
 import { z } from 'zod'
@@ -20,14 +21,14 @@ const ONE_MINUTE = 60 * ONE_SECOND
 const rateLimitTimestamps: number[] = []
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  host: process.env.DATABASE_URL ? undefined : process.env.DB_HOST,
-  port: process.env.DATABASE_URL ? undefined : Number(process.env.DB_PORT) || undefined,
-  user: process.env.DATABASE_URL ? undefined : process.env.DB_USER,
-  password: process.env.DATABASE_URL ? undefined : process.env.DB_PASSWORD,
-  database: process.env.DATABASE_URL ? undefined : process.env.DB_DATABASE,
+  connectionString: env.get('DATABASE_URL'),
+  host: env.get('DB_HOST'),
+  port: env.get('DB_PORT'),
+  user: env.get('DB_USER'),
+  password: env.get('DB_PASSWORD'),
+  database: env.get('DB_DATABASE'),
   ssl:
-    process.env.DB_SSL === 'true'
+    env.get('DB_SSL') === 'true'
       ? {
           rejectUnauthorized: false,
         }
@@ -513,9 +514,13 @@ export default class ImportMyanimelist extends BaseCommand {
     this.logger.info('Importing MyAnimeList manga entries into Trackr database...')
     try {
       await runImport(this.logger)
-    } catch (error: any) {
-      this.logger.error('Fatal error during import', error)
-      process.exitCode = 1
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error))
+      this.logger.error(`Fatal error during import: ${err.message}`)
+      if (err.stack) {
+        this.logger.error(err.stack)
+      }
+      throw err
     }
   }
 }
