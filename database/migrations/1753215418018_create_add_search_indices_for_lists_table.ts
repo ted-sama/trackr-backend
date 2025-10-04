@@ -16,8 +16,14 @@ export default class extends BaseSchema {
           p_name,
           COALESCE(p_description, ''),
           (
-            SELECT string_agg(elem, ' ')
-            FROM jsonb_array_elements_text(COALESCE(p_tags::jsonb, '[]'::jsonb)) AS elem
+            SELECT string_agg(tag.elem, ' ')
+            FROM jsonb_array_elements_text(
+              CASE
+                WHEN p_tags IS NULL THEN '[]'::jsonb
+                WHEN json_typeof(p_tags) = 'array' THEN p_tags::jsonb
+                ELSE '[]'::jsonb
+              END
+            ) AS tag(elem)
           )
         );
       $$ LANGUAGE sql IMMUTABLE;
@@ -27,7 +33,7 @@ export default class extends BaseSchema {
     await this.schema.raw(`
       ALTER TABLE ${this.tableName}
       ADD COLUMN IF NOT EXISTS search_text TEXT
-      GENERATED ALWAYS AS (concat_list_search_fields(name, description, tags)) STORED;
+      GENERATED ALWAYS AS (concat_list_search_fields(name, description, tags::json)) STORED;
     `)
 
     // Créer l'index GIN avec pg_trgm sur la colonne search_text des listes

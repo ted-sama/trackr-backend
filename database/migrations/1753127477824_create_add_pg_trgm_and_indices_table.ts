@@ -9,9 +9,21 @@ export default class extends BaseSchema {
 
     // Créer une fonction IMMUTABLE pour encapsuler l'expression (résout l'erreur d'immutabilité)
     await this.schema.raw(`
-      CREATE OR REPLACE FUNCTION concat_titles(p_title text, p_alt_titles text[])
+      CREATE OR REPLACE FUNCTION concat_titles(p_title text, p_alt_titles json)
       RETURNS text AS $$
-        SELECT p_title || ' ' || array_to_string(p_alt_titles, ' ');
+        SELECT trim(BOTH ' ' FROM concat_ws(' ',
+          p_title,
+          (
+            SELECT string_agg(alt.elem, ' ')
+            FROM jsonb_array_elements_text(
+              CASE
+                WHEN p_alt_titles IS NULL THEN '[]'::jsonb
+                WHEN json_typeof(p_alt_titles) = 'array' THEN p_alt_titles::jsonb
+                ELSE '[]'::jsonb
+              END
+            ) AS alt(elem)
+          )
+        ));
       $$ LANGUAGE sql IMMUTABLE;
     `)
 
@@ -19,7 +31,7 @@ export default class extends BaseSchema {
     await this.schema.raw(`
       ALTER TABLE ${this.tableName}
       ADD COLUMN IF NOT EXISTS search_text TEXT
-      GENERATED ALWAYS AS (concat_titles(title, alternative_titles)) STORED;
+      GENERATED ALWAYS AS (concat_titles(title, alternative_titles::json)) STORED;
     `)
 
     // Créer l'index GIN sur la colonne générée
@@ -40,7 +52,7 @@ export default class extends BaseSchema {
     `)
 
     // Supprimer la fonction personnalisée
-    await this.schema.raw('DROP FUNCTION IF EXISTS concat_titles(text, text[]);')
+    await this.schema.raw('DROP FUNCTION IF EXISTS concat_titles(text, json);')
 
     // Supprimer l'extension (seulement si rien d'autre ne l'utilise)
     await this.schema.raw('DROP EXTENSION IF EXISTS pg_trgm;')
