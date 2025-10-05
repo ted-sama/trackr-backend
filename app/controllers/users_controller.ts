@@ -122,7 +122,12 @@ export default class UsersController {
     const sortOrder = order ?? 'desc'
     queryBuilder.orderBy(sortField, sortOrder)
 
-    const paginated = await queryBuilder.preload('user').preload('bookItems').paginate(page, limit)
+    const paginated = await queryBuilder
+      .preload('user')
+      .preload('bookItems', (bookItemsQuery) => {
+        bookItemsQuery.preload('authors')
+      })
+      .paginate(page, limit)
     const lists = paginated.serialize({
       relations: {
         owner: {
@@ -247,12 +252,14 @@ export default class UsersController {
           .orWhereILike('name', `%${normalizedQuery}%`)
           .orWhereRaw('LOWER(description) = ?', [normalizedQuery])
           .orWhereILike('description', `%${normalizedQuery}%`)
-          .orWhereRaw('EXISTS (SELECT 1 FROM unnest(tags) AS tag WHERE LOWER(tag) = ?)', [
-            normalizedQuery,
-          ])
-          .orWhereRaw('EXISTS (SELECT 1 FROM unnest(tags) AS tag WHERE LOWER(tag) LIKE ?)', [
-            `%${normalizedQuery}%`,
-          ])
+          .orWhereRaw(
+            "EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(tags::jsonb, '[]'::jsonb)) AS tag WHERE LOWER(tag) = ?)",
+            [normalizedQuery]
+          )
+          .orWhereRaw(
+            "EXISTS (SELECT 1 FROM jsonb_array_elements_text(COALESCE(tags::jsonb, '[]'::jsonb)) AS tag WHERE LOWER(tag) LIKE ?)",
+            [`%${normalizedQuery}%`]
+          )
           .orWhereILike('search_text', `%${normalizedQuery}%`)
       })
     }
@@ -262,7 +269,12 @@ export default class UsersController {
     const sortOrder = order ?? 'desc'
     queryBuilder.orderBy(sortField, sortOrder)
 
-    const paginated = await queryBuilder.preload('user').preload('bookItems').paginate(page, limit)
+    const paginated = await queryBuilder
+      .preload('user')
+      .preload('bookItems', (bookItemsQuery) => {
+        bookItemsQuery.preload('authors')
+      })
+      .paginate(page, limit)
     const lists = paginated.serialize({
       relations: {
         owner: {

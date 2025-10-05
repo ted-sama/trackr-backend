@@ -29,10 +29,15 @@ export default class extends BaseSchema {
       $$ LANGUAGE sql IMMUTABLE;
     `)
 
-    // Ajouter la colonne search_text générée pour les listes
+    // Remplacer l'ancienne colonne textuelle par une colonne générée
     await this.schema.raw(`
       ALTER TABLE ${this.tableName}
-      ADD COLUMN IF NOT EXISTS search_text TEXT
+      DROP COLUMN IF EXISTS search_text;
+    `)
+
+    await this.schema.raw(`
+      ALTER TABLE ${this.tableName}
+      ADD COLUMN search_text TEXT
       GENERATED ALWAYS AS (concat_list_search_fields(name, description, tags::json)) STORED;
     `)
 
@@ -60,10 +65,16 @@ export default class extends BaseSchema {
     await this.schema.raw('DROP INDEX IF EXISTS idx_lists_name_trgm;')
     await this.schema.raw('DROP INDEX IF EXISTS idx_lists_description_trgm;')
 
-    // Supprimer la colonne search_text
+    // Supprimer la colonne search_text générée
     await this.schema.raw(`
       ALTER TABLE ${this.tableName}
       DROP COLUMN IF EXISTS search_text;
+    `)
+
+    // Restaurer la colonne textuelle initiale
+    await this.schema.raw(`
+      ALTER TABLE ${this.tableName}
+      ADD COLUMN IF NOT EXISTS search_text TEXT;
     `)
 
     // Supprimer la fonction personnalisée

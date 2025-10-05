@@ -20,7 +20,7 @@ export default class BooksController {
     const limit = request.input('limit', 20)
     const sort = request.input('sort') as 'top_rated' | 'most_listed' | 'most_tracked' | undefined
 
-    const query = Book.query().select('*')
+    const query = Book.query().preload('authors').select('*')
 
     switch (sort) {
       case 'top_rated': {
@@ -81,7 +81,7 @@ export default class BooksController {
    * @responseBody 404 - {"code": "BOOK_NOT_FOUND", "message": "Book not found"} - Book not found
    */
   async show({ params, response }: HttpContext) {
-    const book = await Book.find(params.id)
+    const book = await Book.query().where('id', params.id).preload('authors').first()
     if (!book) {
       throw new AppError('Book not found', {
         status: 404,
@@ -113,6 +113,7 @@ export default class BooksController {
     const normalizedQuery = query.trim().toLowerCase()
 
     const books = await Book.query()
+      .preload('authors')
       .select('*')
       .select(
         db.raw(
@@ -121,14 +122,21 @@ export default class BooksController {
           WHEN LOWER(title) = ? THEN 100
           WHEN LOWER(title) LIKE ? THEN 90
           WHEN EXISTS (
-            SELECT 1 FROM unnest(alternative_titles) AS alt_title 
+            SELECT 1
+            FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
             WHERE LOWER(alt_title) = ?
           ) THEN 85
           WHEN EXISTS (
-            SELECT 1 FROM unnest(alternative_titles) AS alt_title 
+            SELECT 1
+            FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
             WHERE LOWER(alt_title) LIKE ?
           ) THEN 80
-          WHEN LOWER(author) LIKE ? THEN 70
+          WHEN EXISTS (
+            SELECT 1 FROM authors a
+            JOIN author_books ab ON ab.author_id = a.id
+            WHERE ab.book_id = books.id
+              AND LOWER(a.name) LIKE ?
+          ) THEN 70
           WHEN search_text ILIKE ? THEN 60
           ELSE 50
         END as relevance_score
@@ -148,14 +156,28 @@ export default class BooksController {
           .whereRaw('LOWER(title) = ?', [normalizedQuery])
           .orWhereILike('title', `%${normalizedQuery}%`)
           .orWhereRaw(
-            'EXISTS (SELECT 1 FROM unnest(alternative_titles) AS alt_title WHERE LOWER(alt_title) = ?)',
+            `EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
+              WHERE LOWER(alt_title) = ?
+            )`,
             [normalizedQuery]
           )
           .orWhereRaw(
-            'EXISTS (SELECT 1 FROM unnest(alternative_titles) AS alt_title WHERE LOWER(alt_title) LIKE ?)',
+            `EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
+              WHERE LOWER(alt_title) LIKE ?
+            )`,
             [`%${normalizedQuery}%`]
           )
-          .orWhereILike('author', `%${normalizedQuery}%`)
+          .orWhereExists((existsQuery) => {
+            existsQuery
+              .from('authors as a')
+              .innerJoin('author_books as ab', 'ab.author_id', 'a.id')
+              .whereRaw('ab.book_id = books.id')
+              .whereILike('a.name', `%${normalizedQuery}%`)
+          })
           .orWhereILike('search_text', `%${normalizedQuery}%`)
       })
       .orderBy('relevance_score', 'desc')
@@ -175,16 +197,25 @@ export default class BooksController {
       })
     }
 
-    if (book.author) {
-      const books = await Book.query()
-        .whereILike('author', book.author)
-        .whereNot('id', book.id)
-        .orderBy('rating', 'desc')
-        .limit(5)
+    await book.load('authors')
+    const authorIds = book.authors.map((author) => author.id)
 
-      return response.ok(books)
+    if (authorIds.length === 0) {
+      return response.ok([])
     }
 
-    return response.ok([])
+    const books = await Book.query()
+      .whereNot('id', book.id)
+      .whereExists((existsQuery) => {
+        existsQuery
+          .from('author_books as ab')
+          .whereRaw('ab.book_id = books.id')
+          .whereIn('ab.author_id', authorIds)
+      })
+      .preload('authors')
+      .orderBy('rating', 'desc')
+      .limit(5)
+
+    return response.ok(books)
   }
 }

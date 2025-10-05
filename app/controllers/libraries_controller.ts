@@ -28,7 +28,9 @@ export default class LibraryController {
     const library = await user
       .related('bookTrackings')
       .query()
-      .preload('book')
+      .preload('book', (bookQuery) => {
+        bookQuery.preload('authors')
+      })
       .paginate(page, limit)
 
     return response.ok(library)
@@ -62,7 +64,7 @@ export default class LibraryController {
       })
     }
 
-    await user.related('bookTrackings').create({ bookId: book.id })
+    await user.related('bookTrackings').create({ bookId: book.id, status: 'plan_to_read' })
 
     return response.created({ message: 'Book added to library', bookId: book.id })
   }
@@ -152,7 +154,9 @@ export default class LibraryController {
 
     const updatedBookTracking = await BookTracking.query()
       .where('book_id', book.id)
-      .preload('book')
+      .preload('book', (bookQuery) => {
+        bookQuery.preload('authors')
+      })
       .first()
 
     return response.ok(updatedBookTracking)

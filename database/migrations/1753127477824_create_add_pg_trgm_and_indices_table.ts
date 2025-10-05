@@ -27,10 +27,15 @@ export default class extends BaseSchema {
       $$ LANGUAGE sql IMMUTABLE;
     `)
 
-    // Ajouter la colonne générée en utilisant la fonction IMMUTABLE
+    // Remplacer l'ancienne colonne textuelle par une colonne générée
     await this.schema.raw(`
       ALTER TABLE ${this.tableName}
-      ADD COLUMN IF NOT EXISTS search_text TEXT
+      DROP COLUMN IF EXISTS search_text;
+    `)
+
+    await this.schema.raw(`
+      ALTER TABLE ${this.tableName}
+      ADD COLUMN search_text TEXT
       GENERATED ALWAYS AS (concat_titles(title, alternative_titles::json)) STORED;
     `)
 
@@ -49,6 +54,12 @@ export default class extends BaseSchema {
     await this.schema.raw(`
       ALTER TABLE ${this.tableName}
       DROP COLUMN IF EXISTS search_text;
+    `)
+
+    // Restaurer la colonne textuelle initiale
+    await this.schema.raw(`
+      ALTER TABLE ${this.tableName}
+      ADD COLUMN IF NOT EXISTS search_text TEXT;
     `)
 
     // Supprimer la fonction personnalisée

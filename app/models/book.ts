@@ -4,6 +4,33 @@ import type { ManyToMany, HasMany } from '@adonisjs/lucid/types/relations'
 import Category from '#models/category'
 import List from '#models/list'
 import BookTracking from '#models/book_tracking'
+import Author from '#models/author'
+
+const parseStringArray = (value: unknown): string[] | null => {
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string')
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed)
+        ? parsed.filter((item): item is string => typeof item === 'string')
+        : null
+    } catch {
+      return null
+    }
+  }
+
+  return null
+}
+
+const serializeStringArray = (value: string[] | null | undefined) => {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value.filter((item): item is string => typeof item === 'string')
+}
 
 export default class Book extends BaseModel {
   public static table = 'books'
@@ -36,9 +63,6 @@ export default class Book extends BaseModel {
   declare endYear: number | null
 
   @column()
-  declare author: string | null
-
-  @column()
   declare description: string | null
 
   @column()
@@ -53,7 +77,16 @@ export default class Book extends BaseModel {
   @column()
   declare chapters: number | null
 
-  @column()
+  @column({
+    consume: (value) => parseStringArray(value),
+    serialize: (value: string[] | null | undefined) => serializeStringArray(value),
+    prepare: (value: string[] | null | undefined) => {
+      if (!Array.isArray(value) || value.length === 0) {
+        return null
+      }
+      return JSON.stringify(value)
+    },
+  })
   declare alternativeTitles: string[] | null
 
   @column({ serializeAs: null })
@@ -90,4 +123,11 @@ export default class Book extends BaseModel {
 
   @hasMany(() => BookTracking)
   declare bookTrackings: HasMany<typeof BookTracking>
+
+  @manyToMany(() => Author, {
+    pivotTable: 'author_books',
+    pivotForeignKey: 'book_id',
+    pivotRelatedForeignKey: 'author_id',
+  })
+  declare authors: ManyToMany<typeof Author>
 }

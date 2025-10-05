@@ -82,11 +82,13 @@ export default class ListsController {
           WHEN LOWER(description) = ? THEN 85
           WHEN LOWER(description) LIKE ? THEN 80
           WHEN EXISTS (
-            SELECT 1 FROM unnest(tags) AS tag 
+            SELECT 1
+            FROM jsonb_array_elements_text(COALESCE(tags::jsonb, '[]'::jsonb)) AS tag
             WHERE LOWER(tag) = ?
           ) THEN 75
           WHEN EXISTS (
-            SELECT 1 FROM unnest(tags) AS tag 
+            SELECT 1
+            FROM jsonb_array_elements_text(COALESCE(tags::jsonb, '[]'::jsonb)) AS tag
             WHERE LOWER(tag) LIKE ?
           ) THEN 70
           WHEN search_text ILIKE ? THEN 60
@@ -110,18 +112,30 @@ export default class ListsController {
           .orWhereILike('name', `%${normalizedQuery}%`)
           .orWhereRaw('LOWER(description) = ?', [normalizedQuery])
           .orWhereILike('description', `%${normalizedQuery}%`)
-          .orWhereRaw('EXISTS (SELECT 1 FROM unnest(tags) AS tag WHERE LOWER(tag) = ?)', [
-            normalizedQuery,
-          ])
-          .orWhereRaw('EXISTS (SELECT 1 FROM unnest(tags) AS tag WHERE LOWER(tag) LIKE ?)', [
-            `%${normalizedQuery}%`,
-          ])
+          .orWhereRaw(
+            `EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(COALESCE(tags::jsonb, '[]'::jsonb)) AS tag
+              WHERE LOWER(tag) = ?
+            )`,
+            [normalizedQuery]
+          )
+          .orWhereRaw(
+            `EXISTS (
+              SELECT 1
+              FROM jsonb_array_elements_text(COALESCE(tags::jsonb, '[]'::jsonb)) AS tag
+              WHERE LOWER(tag) LIKE ?
+            )`,
+            [`%${normalizedQuery}%`]
+          )
           .orWhereILike('search_text', `%${normalizedQuery}%`)
       })
       .where('is_my_library', false)
       .where('is_public', true)
       .preload('user')
-      .preload('bookItems')
+      .preload('bookItems', (bookItemsQuery) => {
+        bookItemsQuery.preload('authors')
+      })
       .orderBy('relevance_score', 'desc')
       .orderBy('created_at', 'desc')
       .paginate(page, limit)
@@ -157,7 +171,9 @@ export default class ListsController {
         .where('is_my_library', false)
         .where('id', id)
         .preload('user')
-        .preload('bookItems')
+        .preload('bookItems', (bookItemsQuery) => {
+          bookItemsQuery.preload('authors')
+        })
         .first()
     )?.serialize({
       relations: {
@@ -206,7 +222,9 @@ export default class ListsController {
         .where('is_my_library', false)
         .where('is_public', true)
         .preload('user')
-        .preload('bookItems')
+        .preload('bookItems', (bookItemsQuery) => {
+          bookItemsQuery.preload('authors')
+        })
         .paginate(page, limit)
     ).serialize({
       relations: {
@@ -254,7 +272,13 @@ export default class ListsController {
     })
 
     const createdList = (
-      await List.query().where('id', list.id).preload('user').preload('bookItems').first()
+      await List.query()
+        .where('id', list.id)
+        .preload('user')
+        .preload('bookItems', (bookItemsQuery) => {
+          bookItemsQuery.preload('authors')
+        })
+        .first()
     )?.serialize({
       relations: {
         owner: {
@@ -320,7 +344,13 @@ export default class ListsController {
       .save()
 
     const updatedList = (
-      await List.query().where('id', id).preload('user').preload('bookItems').first()
+      await List.query()
+        .where('id', id)
+        .preload('user')
+        .preload('bookItems', (bookItemsQuery) => {
+          bookItemsQuery.preload('authors')
+        })
+        .first()
     )?.serialize({
       relations: {
         owner: {

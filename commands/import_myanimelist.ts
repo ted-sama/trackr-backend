@@ -194,6 +194,32 @@ const uniqueStrings = (values: Array<string | null | undefined>) => {
   )
 }
 
+const formatAuthorName = (name: string | null | undefined) => {
+  const normalized = normalizeString(name)
+  if (!normalized) {
+    return null
+  }
+
+  const segments = normalized
+    .split(',')
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0)
+
+  if (segments.length < 2) {
+    return normalized
+  }
+
+  const [lastName, ...rest] = segments
+  const firstNames = rest.join(' ').trim()
+
+  if (!firstNames.length) {
+    return normalized
+  }
+
+  const formatted = `${firstNames} ${lastName}`.trim()
+  return formatted.length ? formatted : normalized
+}
+
 const isNsfw = (manga: z.infer<typeof MangaSchema>) => {
   const explicitGenreNames = uniqueStrings(manga.explicit_genres?.map((item) => item.name) ?? [])
   if (explicitGenreNames.length > 0) return true
@@ -208,13 +234,13 @@ const mapMangaToBook = (manga: z.infer<typeof MangaSchema>) => {
     ...(manga.demographics ?? []).map((item) => item.name),
   ])
 
-  const themeNames = uniqueStrings((manga.themes ?? []).map((item) => item.name))
-  const explicitGenreNames = uniqueStrings((manga.explicit_genres ?? []).map((item) => item.name))
+  // const themeNames = uniqueStrings((manga.themes ?? []).map((item) => item.name))
+  // const explicitGenreNames = uniqueStrings((manga.explicit_genres ?? []).map((item) => item.name))
 
-  const tagNames = uniqueStrings([
-    ...explicitGenreNames,
-    ...themeNames.filter((name) => !genreNames.includes(name)),
-  ])
+  // const tagNames = uniqueStrings([
+  //   ...explicitGenreNames,
+  //   ...themeNames.filter((name) => !genreNames.includes(name)),
+  // ])
 
   const englishTitle = normalizeString(manga.title_english)
   const defaultTitle = normalizeString(manga.title)
@@ -228,7 +254,11 @@ const mapMangaToBook = (manga: z.infer<typeof MangaSchema>) => {
     ...fallbackTitles,
   ]).filter((candidate) => candidate !== title)
 
-  const authorNames = uniqueStrings((manga.authors ?? []).map((author) => author.name))
+  const authorNames = uniqueStrings(
+    (manga.authors ?? [])
+      .map((author) => formatAuthorName(author.name))
+      .filter((value): value is string => value !== null)
+  )
 
   return {
     title,
@@ -239,10 +269,8 @@ const mapMangaToBook = (manga: z.infer<typeof MangaSchema>) => {
     type: normalizeString(manga.type),
     rating: null,
     genres: genreNames,
-    tags: tagNames,
     release_year: toYear(manga.published?.from),
     end_year: toYear(manga.published?.to),
-    author: authorNames.join(', ') || null,
     description: normalizeString(manga.synopsis),
     description_fr: null,
     status: STATUS_MAP[normalizeString(manga.status) ?? ''] ?? 'ongoing',
@@ -253,6 +281,7 @@ const mapMangaToBook = (manga: z.infer<typeof MangaSchema>) => {
     external_id: manga.mal_id,
     nsfw: isNsfw(manga),
     rating_count: 0,
+    authors: authorNames,
   }
 }
 
@@ -269,10 +298,9 @@ const buildInsertParameters = (book: ReturnType<typeof mapMangaToBook>) => [
   book.type,
   book.rating,
   prepareArrayParam(book.genres),
-  prepareArrayParam(book.tags),
+  // prepareArrayParam(book.tags),
   book.release_year,
   book.end_year,
-  book.author,
   book.description,
   book.description_fr,
   book.status,
@@ -291,10 +319,9 @@ const buildUpdateParameters = (book: ReturnType<typeof mapMangaToBook>) => [
   book.type,
   book.rating,
   prepareArrayParam(book.genres),
-  prepareArrayParam(book.tags),
+  // prepareArrayParam(book.tags),
   book.release_year,
   book.end_year,
-  book.author,
   book.description,
   book.description_fr,
   book.status,
@@ -315,22 +342,21 @@ const updateStatement = `
          type = $3,
          rating = $4,
          genres = $5,
-         tags = $6,
-         release_year = $7,
-         end_year = $8,
-         author = $9,
-         description = $10,
-         description_fr = $11,
-         status = $12,
-         volumes = $13,
-         chapters = $14,
-         alternative_titles = $15,
-         data_source = $16,
-         nsfw = $17,
-         rating_count = $18,
+         release_year = $6,
+         end_year = $7,
+         description = $8,
+         description_fr = $9,
+         status = $10,
+         volumes = $11,
+         chapters = $12,
+         alternative_titles = $13,
+         data_source = $14,
+         nsfw = $15,
+         rating_count = $16,
          updated_at = NOW()
-   WHERE external_id = $19
-     AND data_source = $20
+  WHERE external_id = $17
+    AND data_source = $18
+  RETURNING id
 `
 
 const insertStatement = `
@@ -340,10 +366,8 @@ const insertStatement = `
     type,
     rating,
     genres,
-    tags,
     release_year,
     end_year,
-    author,
     description,
     description_fr,
     status,
@@ -356,28 +380,117 @@ const insertStatement = `
     rating_count
   ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-    $11, $12, $13, $14, $15, $16, $17, $18, $19
+    $11, $12, $13, $14, $15, $16, $17
   )
+  RETURNING id
 `
+
+type UpsertResult =
+  | { action: 'inserted'; bookId: number }
+  | { action: 'updated'; bookId: number }
+  | { action: 'skipped-duplicate'; reason: 'title-conflict' }
 
 const upsertBook = async (
   client: import('pg').PoolClient,
   book: ReturnType<typeof mapMangaToBook>
-) => {
+): Promise<UpsertResult> => {
   const updateParams = buildUpdateParameters(book)
   const updateResult = await client.query(updateStatement, updateParams)
   if ((updateResult.rowCount ?? 0) > 0) {
-    return { action: 'updated' as const }
+    return { action: 'updated' as const, bookId: updateResult.rows[0].id as number }
   }
 
   try {
-    await client.query(insertStatement, buildInsertParameters(book))
-    return { action: 'inserted' as const }
+    const insertResult = await client.query(insertStatement, buildInsertParameters(book))
+    return { action: 'inserted' as const, bookId: insertResult.rows[0].id as number }
   } catch (error: any) {
     if (error?.code === '23505' && error?.constraint === 'books_title_unique') {
       return { action: 'skipped-duplicate' as const, reason: 'title-conflict' as const }
     }
     throw error
+  }
+}
+
+const syncBookAuthors = async (
+  client: import('pg').PoolClient,
+  bookId: number,
+  authorNames: string[]
+) => {
+  if (!Array.isArray(authorNames) || authorNames.length === 0) {
+    await client.query('BEGIN')
+    try {
+      await client.query('DELETE FROM author_books WHERE book_id = $1', [bookId])
+      await client.query('COMMIT')
+    } catch (error) {
+      await client.query('ROLLBACK')
+      throw error
+    }
+    return
+  }
+
+  await client.query('BEGIN')
+  try {
+    await client.query(
+      `
+        INSERT INTO authors (name)
+        SELECT DISTINCT new_author.name
+        FROM UNNEST($1::text[]) AS new_author(name)
+        ON CONFLICT (name) DO NOTHING
+      `,
+      [authorNames]
+    )
+
+    await client.query(
+      `
+        DELETE FROM author_books
+        WHERE book_id = $1
+          AND author_id NOT IN (
+            SELECT id FROM authors WHERE name = ANY($2::text[])
+          )
+      `,
+      [bookId, authorNames]
+    )
+
+    await client.query(
+      `
+        INSERT INTO author_books (book_id, author_id)
+        SELECT $1, a.id
+        FROM authors a
+        WHERE a.name = ANY($2::text[])
+        ON CONFLICT DO NOTHING
+      `,
+      [bookId, authorNames]
+    )
+
+    await client.query('COMMIT')
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  }
+}
+
+const syncAuthorsWithRetry = async (
+  client: import('pg').PoolClient,
+  bookId: number,
+  authorNames: string[]
+) => {
+  const MAX_ATTEMPTS = 3
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    try {
+      await syncBookAuthors(client, bookId, authorNames)
+      return
+    } catch (error: any) {
+      const isUniqueViolation = error?.code === '23505'
+      const isSerializationError = error?.code === '40001'
+      const isDeadlock = error?.code === '40P01'
+
+      if (attempt >= MAX_ATTEMPTS || !(isUniqueViolation || isSerializationError || isDeadlock)) {
+        throw error
+      }
+
+      const backoff = Math.min(REQUEST_DELAY_MS * Math.pow(2, attempt), ONE_SECOND * 5)
+      await sleep(backoff)
+    }
   }
 }
 
@@ -467,8 +580,10 @@ const runImport = async (logger: BaseCommand['logger']) => {
           const result = await upsertBook(client, book)
           if (result.action === 'inserted') {
             totalInserted += 1
+            await syncAuthorsWithRetry(client, result.bookId, book.authors)
           } else if (result.action === 'updated') {
             totalUpdated += 1
+            await syncAuthorsWithRetry(client, result.bookId, book.authors)
           } else if (result.action === 'skipped-duplicate') {
             totalDuplicateTitle += 1
           }

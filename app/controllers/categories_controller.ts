@@ -16,7 +16,11 @@ export default class CategoriesController {
     const page = request.input('page', 1)
     const limit = request.input('limit', 20)
 
-    const categories = await Category.query().preload('books').paginate(page, limit)
+    const categories = await Category.query()
+      .preload('books', (booksQuery) => {
+        booksQuery.preload('authors')
+      })
+      .paginate(page, limit)
     return response.ok(categories)
   }
 
@@ -29,7 +33,12 @@ export default class CategoriesController {
    * @responseBody 404 - {"code": "CATEGORY_NOT_FOUND", "message": "Category not found"} - Category not found
    */
   async show({ params, response }: HttpContext) {
-    const category = await Category.query().where('id', params.id).preload('books').first()
+    const category = await Category.query()
+      .where('id', params.id)
+      .preload('books', (booksQuery) => {
+        booksQuery.preload('authors')
+      })
+      .first()
 
     if (!category) {
       throw new AppError('Category not found', {

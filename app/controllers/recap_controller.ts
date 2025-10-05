@@ -18,7 +18,7 @@ export default class RecapController {
       const { id: bookId, chapterId } = params
 
       // Verify book exists
-      const book = await Book.find(bookId)
+      const book = await Book.query().where('id', bookId).preload('authors').first()
       if (!book) {
         return response.notFound({ message: 'Book not found' })
       }
@@ -38,7 +38,8 @@ export default class RecapController {
       const ai = new GoogleGenAI({ apiKey })
 
       // Create prompt for recap generation
-      const prompt = `Generate a comprehensive recap for the manga "${book.title}" by ${book.author} for chapter ${chapterNumber}.`
+      const authorNames = book.authors.map((author) => author.name).join(', ')
+      const prompt = `Generate a comprehensive recap for the manga "${book.title}" by ${authorNames} for chapter ${chapterNumber}.`
 
       // Set response headers for streaming
       response.header('Content-Type', 'text/plain; charset=utf-8')

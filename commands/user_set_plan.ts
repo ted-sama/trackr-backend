@@ -6,7 +6,9 @@ export default class UserSetPlan extends BaseCommand {
   static commandName = 'user:set-plan'
   static description = 'Change the plan of a user'
 
-  static options: CommandOptions = {}
+  static options: CommandOptions = {
+    startApp: true,
+  }
 
   async run() {
     const email = await this.prompt.ask('Enter the email of the user')

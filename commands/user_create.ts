@@ -6,7 +6,9 @@ export default class UserCreate extends BaseCommand {
   static commandName = 'user:create'
   static description = 'Create a new user'
 
-  static options: CommandOptions = {}
+  static options: CommandOptions = {
+    startApp: true,
+  }
 
   async run() {
     const email: string = await this.prompt.ask('Enter the email of the user')
@@ -20,6 +22,6 @@ export default class UserCreate extends BaseCommand {
       | 'admin'
       | 'user'
     const user = await User.create({ email, password, username, displayName, plan, role })
-    this.logger.info(`User created: ${user.email}`)
+    this.logger.info(`User created: ${user.email}, password: ${password}`)
   }
 }

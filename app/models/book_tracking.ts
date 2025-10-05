@@ -3,7 +3,6 @@ import { BaseModel, column, belongsTo, beforeUpdate, beforeSave } from '@adonisj
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import User from '#models/user'
 import Book from '#models/book'
-
 export default class BookTracking extends BaseModel {
   public static table = 'book_tracking'
 
