@@ -24,7 +24,7 @@ export default class RecapController {
       }
 
       // Convert chapterId to number for validation
-      const chapterNumber = parseInt(chapterId)
+      const chapterNumber = Number.parseInt(chapterId)
       if (isNaN(chapterNumber) || chapterNumber <= 0) {
         return response.badRequest({ message: 'Chapter number must be a positive integer' })
       }

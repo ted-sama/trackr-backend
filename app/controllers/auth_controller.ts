@@ -16,12 +16,20 @@ export default class AuthController {
   async register({ request, response }: HttpContext) {
     const { email, username, displayName, password } = await registerSchema.validate(request.body())
 
-    const existingUser = await User.findBy('email', email)
+    const existingUserByEmail = await User.findBy('email', email)
+    const existingUserByUsername = await User.findBy('username', username)
 
-    if (existingUser) {
-      throw new AppError('User already exists', {
+    if (existingUserByEmail) {
+      throw new AppError('Email already used', {
         status: 409,
-        code: 'AUTH_USER_ALREADY_EXISTS',
+        code: 'AUTH_EMAIL_ALREADY_USED',
+      })
+    }
+
+    if (existingUserByUsername) {
+      throw new AppError('Username already used', {
+        status: 409,
+        code: 'AUTH_USERNAME_TAKEN',
       })
     }
 

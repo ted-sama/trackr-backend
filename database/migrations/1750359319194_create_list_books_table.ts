@@ -7,9 +7,9 @@ export default class extends BaseSchema {
     this.schema.createTable(this.tableName, (table) => {
       table.integer('list_id').unsigned().references('id').inTable('lists').onDelete('CASCADE')
       table.integer('book_id').unsigned().references('id').inTable('books').onDelete('CASCADE')
-      
+
       table.primary(['list_id', 'book_id'])
-      
+
       table.integer('item_number').nullable()
       table.timestamp('added_at').defaultTo(this.now())
       table.timestamp('updated_at').defaultTo(this.now())

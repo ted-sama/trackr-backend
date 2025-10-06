@@ -13,7 +13,13 @@ export default class Category extends BaseModel {
   declare title: string
 
   @column()
+  declare titleFr: string | null
+
+  @column()
   declare description: string | null
+
+  @column()
+  declare descriptionFr: string | null
 
   @column()
   declare isFeatured: boolean | null
