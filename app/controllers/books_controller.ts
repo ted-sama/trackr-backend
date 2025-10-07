@@ -114,42 +114,32 @@ export default class BooksController {
 
     const normalizedQuery = query.trim().toLowerCase()
 
-    const books = await Book.query()
+    // Utiliser une CTE (Common Table Expression) pour calculer le score de pertinence une seule fois
+    const searchResults = await db
+      .from('books')
       .where('nsfw', nsfw)
-      .preload('authors')
-      .select('*')
+      .select('books.*')
       .select(
         db.raw(
           `
         CASE 
           WHEN LOWER(title) = ? THEN 100
           WHEN LOWER(title) LIKE ? THEN 90
+          WHEN search_text ILIKE ? AND LOWER(title) != ? THEN 80
           WHEN EXISTS (
-            SELECT 1
-            FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
-            WHERE LOWER(alt_title) = ?
-          ) THEN 85
-          WHEN EXISTS (
-            SELECT 1
-            FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
-            WHERE LOWER(alt_title) LIKE ?
-          ) THEN 80
-          WHEN EXISTS (
-            SELECT 1 FROM authors a
-            JOIN author_books ab ON ab.author_id = a.id
+            SELECT 1 FROM author_books ab
+            JOIN authors a ON a.id = ab.author_id
             WHERE ab.book_id = books.id
-              AND LOWER(a.name) LIKE ?
+              AND a.name ILIKE ?
           ) THEN 70
-          WHEN search_text ILIKE ? THEN 60
           ELSE 50
         END as relevance_score
       `,
           [
             normalizedQuery,
             `${normalizedQuery}%`,
-            normalizedQuery,
-            `${normalizedQuery}%`,
             `%${normalizedQuery}%`,
+            normalizedQuery,
             `%${normalizedQuery}%`,
           ]
         )
@@ -158,37 +148,46 @@ export default class BooksController {
         searchQuery
           .whereRaw('LOWER(title) = ?', [normalizedQuery])
           .orWhereILike('title', `%${normalizedQuery}%`)
-          .orWhereRaw(
-            `EXISTS (
-              SELECT 1
-              FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
-              WHERE LOWER(alt_title) = ?
-            )`,
-            [normalizedQuery]
-          )
-          .orWhereRaw(
-            `EXISTS (
-              SELECT 1
-              FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
-              WHERE LOWER(alt_title) LIKE ?
-            )`,
-            [`%${normalizedQuery}%`]
-          )
+          .orWhereILike('search_text', `%${normalizedQuery}%`)
           .orWhereExists((existsQuery) => {
             existsQuery
-              .from('authors as a')
-              .innerJoin('author_books as ab', 'ab.author_id', 'a.id')
+              .from('author_books as ab')
+              .innerJoin('authors as a', 'a.id', 'ab.author_id')
               .whereRaw('ab.book_id = books.id')
               .whereILike('a.name', `%${normalizedQuery}%`)
           })
-          .orWhereILike('search_text', `%${normalizedQuery}%`)
       })
-      .orderBy('relevance_score', 'desc')
-      .orderBy('rating_count', 'desc')
-      .orderBy('rating', 'desc')
+      .orderByRaw('relevance_score DESC, rating_count DESC NULLS LAST, rating DESC NULLS LAST')
       .paginate(page, limit)
 
-    return response.ok(books)
+    // Charger les auteurs pour tous les livres retournés
+    const bookIds = searchResults.map((book) => book.id)
+    if (bookIds.length > 0) {
+      const authorsData = await db
+        .from('authors')
+        .innerJoin('author_books', 'author_books.author_id', 'authors.id')
+        .whereIn('author_books.book_id', bookIds)
+        .select('authors.*', 'author_books.book_id')
+
+      // Grouper les auteurs par book_id
+      const authorsByBookId = authorsData.reduce(
+        (acc, author) => {
+          if (!acc[author.book_id]) {
+            acc[author.book_id] = []
+          }
+          acc[author.book_id].push(author)
+          return acc
+        },
+        {} as Record<number, any[]>
+      )
+
+      // Ajouter les auteurs à chaque livre
+      searchResults.forEach((book) => {
+        book.authors = authorsByBookId[book.id] || []
+      })
+    }
+
+    return response.ok(searchResults)
   }
 
   async getBySameAuthor({ params, request, response }: HttpContext) {
