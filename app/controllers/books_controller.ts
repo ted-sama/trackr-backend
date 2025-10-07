@@ -19,8 +19,9 @@ export default class BooksController {
     const page = request.input('page', 1)
     const limit = request.input('limit', 20)
     const sort = request.input('sort') as 'top_rated' | 'most_listed' | 'most_tracked' | undefined
+    const nsfw = request.input('nsfw', false)
 
-    const query = Book.query().preload('authors').select('*')
+    const query = Book.query().preload('authors').select('*').where('nsfw', nsfw)
 
     switch (sort) {
       case 'top_rated': {
@@ -102,6 +103,7 @@ export default class BooksController {
     const page = request.input('page', 1)
     const limit = request.input('limit', 20)
     const query = request.input('q')
+    const nsfw = request.input('nsfw', false)
 
     if (!query) {
       throw new AppError('Search query is required', {
@@ -113,6 +115,7 @@ export default class BooksController {
     const normalizedQuery = query.trim().toLowerCase()
 
     const books = await Book.query()
+      .where('nsfw', nsfw)
       .preload('authors')
       .select('*')
       .select(
@@ -188,7 +191,9 @@ export default class BooksController {
     return response.ok(books)
   }
 
-  async getBySameAuthor({ params, response }: HttpContext) {
+  async getBySameAuthor({ params, request, response }: HttpContext) {
+    const nsfw = request.input('nsfw', false)
+
     const book = await Book.find(params.id)
     if (!book) {
       throw new AppError('Book not found', {
@@ -206,6 +211,7 @@ export default class BooksController {
 
     const books = await Book.query()
       .whereNot('id', book.id)
+      .where('nsfw', nsfw)
       .whereExists((existsQuery) => {
         existsQuery
           .from('author_books as ab')
