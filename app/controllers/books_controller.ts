@@ -111,81 +111,128 @@ export default class BooksController {
     }
 
     const normalizedQuery = query.trim().toLowerCase()
+    const prefixPattern = `${normalizedQuery}%`
+    const containsPattern = `%${normalizedQuery}%`
 
-    const books = await Book.query()
-      .preload('authors')
-      .select('*')
-      .select(
-        db.raw(
-          `
-        CASE 
-          WHEN LOWER(title) = ? THEN 100
-          WHEN LOWER(title) LIKE ? THEN 90
-          WHEN EXISTS (
-            SELECT 1
-            FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
-            WHERE LOWER(alt_title) = ?
-          ) THEN 85
-          WHEN EXISTS (
-            SELECT 1
-            FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
-            WHERE LOWER(alt_title) LIKE ?
-          ) THEN 80
-          WHEN EXISTS (
-            SELECT 1 FROM authors a
-            JOIN author_books ab ON ab.author_id = a.id
-            WHERE ab.book_id = books.id
-              AND LOWER(a.name) LIKE ?
-          ) THEN 70
-          WHEN search_text ILIKE ? THEN 60
-          ELSE 50
-        END as relevance_score
-      `,
-          [
-            normalizedQuery,
-            `${normalizedQuery}%`,
-            normalizedQuery,
-            `${normalizedQuery}%`,
-            `%${normalizedQuery}%`,
-            `%${normalizedQuery}%`,
-          ]
+    // Utiliser une CTE pour éviter la duplication et améliorer les performances
+    const books = await db
+      .rawQuery(
+        `
+        WITH search_matches AS (
+          SELECT 
+            b.id,
+            CASE 
+              WHEN LOWER(b.title) = :exactMatch THEN 100
+              WHEN LOWER(b.title) LIKE :prefixMatch THEN 90
+              WHEN b.alternative_titles::jsonb @> :exactJsonMatch THEN 85
+              WHEN EXISTS (
+                SELECT 1 FROM jsonb_array_elements_text(b.alternative_titles::jsonb) AS alt
+                WHERE LOWER(alt) LIKE :prefixMatch
+              ) THEN 80
+              WHEN EXISTS (
+                SELECT 1 FROM author_books ab
+                JOIN authors a ON a.id = ab.author_id
+                WHERE ab.book_id = b.id AND LOWER(a.name) LIKE :containsMatch
+              ) THEN 70
+              WHEN b.search_text ILIKE :containsMatch THEN 60
+              ELSE 50
+            END as relevance_score
+          FROM books b
+          WHERE 
+            LOWER(b.title) = :exactMatch
+            OR LOWER(b.title) LIKE :containsMatch
+            OR b.alternative_titles::jsonb @> :exactJsonMatch
+            OR EXISTS (
+              SELECT 1 FROM jsonb_array_elements_text(b.alternative_titles::jsonb) AS alt
+              WHERE LOWER(alt) LIKE :containsMatch
+            )
+            OR EXISTS (
+              SELECT 1 FROM author_books ab
+              JOIN authors a ON a.id = ab.author_id
+              WHERE ab.book_id = b.id AND LOWER(a.name) LIKE :containsMatch
+            )
+            OR b.search_text ILIKE :containsMatch
         )
+        SELECT 
+          b.*,
+          sm.relevance_score
+        FROM search_matches sm
+        JOIN books b ON b.id = sm.id
+        ORDER BY sm.relevance_score DESC, b.rating_count DESC, b.rating DESC NULLS LAST
+        LIMIT :limit OFFSET :offset
+      `,
+        {
+          exactMatch: normalizedQuery,
+          prefixMatch: prefixPattern,
+          containsMatch: containsPattern,
+          exactJsonMatch: JSON.stringify([normalizedQuery]),
+          limit: limit,
+          offset: (page - 1) * limit,
+        }
       )
-      .where((searchQuery) => {
-        searchQuery
-          .whereRaw('LOWER(title) = ?', [normalizedQuery])
-          .orWhereILike('title', `%${normalizedQuery}%`)
-          .orWhereRaw(
-            `EXISTS (
-              SELECT 1
-              FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
-              WHERE LOWER(alt_title) = ?
-            )`,
-            [normalizedQuery]
-          )
-          .orWhereRaw(
-            `EXISTS (
-              SELECT 1
-              FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
-              WHERE LOWER(alt_title) LIKE ?
-            )`,
-            [`%${normalizedQuery}%`]
-          )
-          .orWhereExists((existsQuery) => {
-            existsQuery
-              .from('authors as a')
-              .innerJoin('author_books as ab', 'ab.author_id', 'a.id')
-              .whereRaw('ab.book_id = books.id')
-              .whereILike('a.name', `%${normalizedQuery}%`)
-          })
-          .orWhereILike('search_text', `%${normalizedQuery}%`)
-      })
-      .orderBy('relevance_score', 'desc')
-      .orderBy('rating_count', 'desc')
-      .orderBy('rating', 'desc')
-      .paginate(page, limit)
+      .then((result) => result.rows)
 
-    return response.ok(books)
+    // Charger les relations authors
+    const bookIds = books.map((book: any) => book.id)
+    const booksWithAuthors =
+      bookIds.length > 0 ? await Book.query().whereIn('id', bookIds).preload('authors') : []
+
+    // Mapper les résultats avec le relevance_score
+    const sortedBooks = books.map((rawBook: any) => {
+      const book = booksWithAuthors.find((b) => b.id === rawBook.id)
+      if (book) {
+        // @ts-ignore - Ajouter le relevance_score pour debug
+        book.$extras.relevance_score = rawBook.relevance_score
+      }
+      return book
+    })
+
+    // Compter le total pour la pagination
+    const totalQuery = await db
+      .rawQuery(
+        `
+        SELECT COUNT(DISTINCT b.id) as total
+        FROM books b
+        WHERE 
+          LOWER(b.title) = :exactMatch
+          OR LOWER(b.title) LIKE :containsMatch
+          OR b.alternative_titles::jsonb @> :exactJsonMatch
+          OR EXISTS (
+            SELECT 1 FROM jsonb_array_elements_text(b.alternative_titles::jsonb) AS alt
+            WHERE LOWER(alt) LIKE :containsMatch
+          )
+          OR EXISTS (
+            SELECT 1 FROM author_books ab
+            JOIN authors a ON a.id = ab.author_id
+            WHERE ab.book_id = b.id AND LOWER(a.name) LIKE :containsMatch
+          )
+          OR b.search_text ILIKE :containsMatch
+      `,
+        {
+          exactMatch: normalizedQuery,
+          containsMatch: containsPattern,
+          exactJsonMatch: JSON.stringify([normalizedQuery]),
+        }
+      )
+      .then((result) => Number.parseInt(result.rows[0].total))
+
+    // Construire la réponse paginée manuellement
+    const paginatedResponse = {
+      meta: {
+        total: totalQuery,
+        per_page: limit,
+        current_page: page,
+        last_page: Math.ceil(totalQuery / limit),
+        first_page: 1,
+        first_page_url: `/?page=1`,
+        last_page_url: `/?page=${Math.ceil(totalQuery / limit)}`,
+        next_page_url: page < Math.ceil(totalQuery / limit) ? `/?page=${page + 1}` : null,
+        previous_page_url: page > 1 ? `/?page=${page - 1}` : null,
+      },
+      data: sortedBooks,
+    }
+
+    return response.ok(paginatedResponse)
   }
 
   async getBySameAuthor({ params, response }: HttpContext) {
