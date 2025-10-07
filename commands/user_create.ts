@@ -15,7 +15,13 @@ export default class UserCreate extends BaseCommand {
     const password: string = await this.prompt.ask('Enter the password of the user')
     const username: string = await this.prompt.ask('Enter the username of the user')
     const displayName: string = await this.prompt.ask('Enter the display name of the user')
-    const user = await User.create({ email, password, username, displayName })
+    const plan: 'free' | 'plus' = (await this.prompt.ask('Enter the plan of the user')) as
+      | 'free'
+      | 'plus'
+    const role: 'admin' | 'user' = (await this.prompt.ask('Enter the role of the user')) as
+      | 'admin'
+      | 'user'
+    const user = await User.create({ email, password, username, displayName, plan, role })
     this.logger.info(`User created: ${user.email}, password: ${password}`)
   }
 }

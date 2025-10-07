@@ -12,7 +12,6 @@ export default class BooksController {
    * @paramQuery page - Page number for pagination - @type(number)
    * @paramQuery limit - Number of items per page (max 100) - @type(number)
    * @paramQuery sort - Sorting method - @type(string) @enum(top_rated, most_listed, most_tracked)
-   * @paramQuery nsfw - Whether to include NSFW books - @type(boolean)
    * @responseBody 200 - <Book[]>.paginated() - List of books with pagination
    * @responseBody 400 - Bad request
    */
@@ -20,13 +19,8 @@ export default class BooksController {
     const page = request.input('page', 1)
     const limit = request.input('limit', 20)
     const sort = request.input('sort') as 'top_rated' | 'most_listed' | 'most_tracked' | undefined
-    const nsfw = request.input('nsfw', false)
 
     const query = Book.query().preload('authors').select('*')
-
-    if (nsfw) {
-      query.where('nsfw', true)
-    }
 
     switch (sort) {
       case 'top_rated': {
@@ -108,7 +102,6 @@ export default class BooksController {
     const page = request.input('page', 1)
     const limit = request.input('limit', 20)
     const query = request.input('q')
-    const nsfw = request.input('nsfw', false)
 
     if (!query) {
       throw new AppError('Search query is required', {
@@ -119,38 +112,40 @@ export default class BooksController {
 
     const normalizedQuery = query.trim().toLowerCase()
 
-    // Optimized search using raw SQL for better performance with indexes
-    const books = await db
-      .from('books')
-      .select('books.*')
+    const books = await Book.query()
+      .preload('authors')
+      .select('*')
       .select(
         db.raw(
           `
         CASE 
-          WHEN LOWER(books.title) = ? THEN 100
-          WHEN LOWER(books.title) LIKE ? THEN 90
-          WHEN alternative_titles::jsonb @> ?::jsonb THEN 85
+          WHEN LOWER(title) = ? THEN 100
+          WHEN LOWER(title) LIKE ? THEN 90
           WHEN EXISTS (
             SELECT 1
-            FROM jsonb_array_elements_text(alternative_titles::jsonb) AS alt_title
-            WHERE alt_title ILIKE ?
+            FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
+            WHERE LOWER(alt_title) = ?
+          ) THEN 85
+          WHEN EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
+            WHERE LOWER(alt_title) LIKE ?
           ) THEN 80
           WHEN EXISTS (
-            SELECT 1
-            FROM author_books ab
-            INNER JOIN authors a ON a.id = ab.author_id
+            SELECT 1 FROM authors a
+            JOIN author_books ab ON ab.author_id = a.id
             WHERE ab.book_id = books.id
               AND LOWER(a.name) LIKE ?
           ) THEN 70
-          WHEN books.search_text ILIKE ? THEN 60
+          WHEN search_text ILIKE ? THEN 60
           ELSE 50
         END as relevance_score
       `,
           [
             normalizedQuery,
             `${normalizedQuery}%`,
-            JSON.stringify([normalizedQuery]),
-            `%${normalizedQuery}%`,
+            normalizedQuery,
+            `${normalizedQuery}%`,
             `%${normalizedQuery}%`,
             `%${normalizedQuery}%`,
           ]
@@ -158,69 +153,42 @@ export default class BooksController {
       )
       .where((searchQuery) => {
         searchQuery
-          .whereRaw('LOWER(books.title) = ?', [normalizedQuery])
-          .orWhereRaw('LOWER(books.title) LIKE ?', [`%${normalizedQuery}%`])
-          .orWhereRaw('alternative_titles::jsonb @> ?::jsonb', [JSON.stringify([normalizedQuery])])
+          .whereRaw('LOWER(title) = ?', [normalizedQuery])
+          .orWhereILike('title', `%${normalizedQuery}%`)
           .orWhereRaw(
             `EXISTS (
               SELECT 1
-              FROM jsonb_array_elements_text(alternative_titles::jsonb) AS alt_title
-              WHERE alt_title ILIKE ?
+              FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
+              WHERE LOWER(alt_title) = ?
             )`,
-            [`%${normalizedQuery}%`]
+            [normalizedQuery]
           )
-          .where('books.nsfw', nsfw)
           .orWhereRaw(
             `EXISTS (
               SELECT 1
-              FROM author_books ab
-              INNER JOIN authors a ON a.id = ab.author_id
-              WHERE ab.book_id = books.id
-                AND LOWER(a.name) LIKE ?
+              FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
+              WHERE LOWER(alt_title) LIKE ?
             )`,
             [`%${normalizedQuery}%`]
           )
-          .orWhereRaw('books.search_text ILIKE ?', [`%${normalizedQuery}%`])
+          .orWhereExists((existsQuery) => {
+            existsQuery
+              .from('authors as a')
+              .innerJoin('author_books as ab', 'ab.author_id', 'a.id')
+              .whereRaw('ab.book_id = books.id')
+              .whereILike('a.name', `%${normalizedQuery}%`)
+          })
+          .orWhereILike('search_text', `%${normalizedQuery}%`)
       })
       .orderBy('relevance_score', 'desc')
-      .orderByRaw('books.rating_count DESC NULLS LAST')
-      .orderByRaw('books.rating DESC NULLS LAST')
+      .orderBy('rating_count', 'desc')
+      .orderBy('rating', 'desc')
       .paginate(page, limit)
-
-    // Manually load authors for the results in a single efficient query
-    const bookIds = books.all().map((book: any) => book.id)
-    if (bookIds.length > 0) {
-      const authorsData = await db
-        .from('authors')
-        .select('authors.*', 'author_books.book_id')
-        .innerJoin('author_books', 'author_books.author_id', 'authors.id')
-        .whereIn('author_books.book_id', bookIds)
-
-      // Map authors to books
-      const authorsMap = new Map<number, any[]>()
-      for (const authorData of authorsData) {
-        if (!authorsMap.has(authorData.book_id)) {
-          authorsMap.set(authorData.book_id, [])
-        }
-        authorsMap.get(authorData.book_id)!.push({
-          id: authorData.id,
-          name: authorData.name,
-          createdAt: authorData.created_at,
-          updatedAt: authorData.updated_at,
-        })
-      }
-
-      // Attach authors to books
-      books.all().forEach((book: any) => {
-        book.authors = authorsMap.get(book.id) || []
-      })
-    }
 
     return response.ok(books)
   }
 
-  async getBySameAuthor({ params, request, response }: HttpContext) {
-    const nsfw = request.input('nsfw', false)
+  async getBySameAuthor({ params, response }: HttpContext) {
     const book = await Book.find(params.id)
     if (!book) {
       throw new AppError('Book not found', {
@@ -238,7 +206,6 @@ export default class BooksController {
 
     const books = await Book.query()
       .whereNot('id', book.id)
-      .where('nsfw', nsfw)
       .whereExists((existsQuery) => {
         existsQuery
           .from('author_books as ab')
