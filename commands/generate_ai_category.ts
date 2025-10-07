@@ -6,7 +6,7 @@ import { BaseCommand } from '@adonisjs/core/ace'
 import type { CommandOptions } from '@adonisjs/core/types/ace'
 
 export default class GenerateAiCategory extends BaseCommand {
-  static commandName = 'generate:ai-category'
+  static commandName = 'category:generate'
   static description = 'Generate a new category with mangas using AI'
 
   static options: CommandOptions = {
@@ -32,7 +32,9 @@ export default class GenerateAiCategory extends BaseCommand {
   "title": "Category title in English",
   "description": "Concise category description in English",
   "books": ["Manga title 1", "Manga title 2", ...]
-}`,
+}
+
+IMPORTANT: Provide EXACTLY 10-12 manga titles maximum. Use EXACT official manga titles (e.g. "One Piece", "Naruto", "Berserk") to ensure accurate matching.`,
             },
           ],
         },
@@ -66,34 +68,59 @@ export default class GenerateAiCategory extends BaseCommand {
 
     const normalizedCandidates = proposedBooks.map((t) => t.trim().toLowerCase())
 
-    const books = await Book.query()
-      .where((query) => {
-        for (const candidate of normalizedCandidates) {
-          query.orWhere((sub) => {
-            sub
-              .whereRaw('LOWER(title) = ?', [candidate])
-              .orWhereILike('title', `%${candidate}%`)
-              .orWhereRaw(
-                `EXISTS (
-                  SELECT 1
-                  FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
-                  WHERE LOWER(alt_title) = ?
-                )`,
-                [candidate]
-              )
-              .orWhereRaw(
-                `EXISTS (
-                  SELECT 1
-                  FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
-                  WHERE LOWER(alt_title) LIKE ?
-                )`,
-                [`%${candidate}%`]
-              )
-              .orWhereILike('search_text', `%${candidate}%`)
-          })
-        }
+    // Fetch candidate books with stricter matching
+    const candidateBooks = await Book.query().where((query) => {
+      for (const candidate of normalizedCandidates) {
+        query.orWhere((sub) => {
+          sub
+            // Exact title match (highest priority)
+            .whereRaw('LOWER(title) = ?', [candidate])
+            // Exact match in alternative titles
+            .orWhereRaw(
+              `EXISTS (
+                SELECT 1
+                FROM jsonb_array_elements_text(COALESCE(alternative_titles::jsonb, '[]'::jsonb)) AS alt_title
+                WHERE LOWER(alt_title) = ?
+              )`,
+              [candidate]
+            )
+            // Only allow partial matches if they start with the candidate (more restrictive)
+            .orWhereRaw('LOWER(title) LIKE ?', [`${candidate}%`])
+        })
+      }
+    })
+
+    // Score and sort books by match quality
+    const scoredBooks = candidateBooks.map((book) => {
+      const titleLower = book.title.toLowerCase()
+      const altTitles = (book.alternativeTitles || []).map((t: string) => t.toLowerCase())
+
+      let score = 0
+
+      // Exact match in title (highest priority)
+      if (normalizedCandidates.includes(titleLower)) {
+        score = 100
+      }
+      // Exact match in alternative titles
+      else if (altTitles.some((alt: string) => normalizedCandidates.includes(alt))) {
+        score = 90
+      }
+      // Partial match at start of title
+      else if (normalizedCandidates.some((c) => titleLower.startsWith(c))) {
+        score = 50
+      }
+
+      return { book, score }
+    })
+
+    // Sort by score (desc) then by rating (desc), limit to 20
+    const books = scoredBooks
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score
+        return (b.book.rating || 0) - (a.book.rating || 0)
       })
-      .distinct('books.id')
+      .slice(0, 20) // Maximum 20 books per category
+      .map((item) => item.book)
 
     if (books.length === 0) {
       this.logger.info('No books found for this category')
