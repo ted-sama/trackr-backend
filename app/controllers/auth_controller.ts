@@ -33,6 +33,13 @@ export default class AuthController {
       })
     }
 
+    if (username.trim().includes(' ')) {
+      throw new AppError('Username cannot contain spaces', {
+        status: 400,
+        code: 'USER_USERNAME_INVALID',
+      })
+    }
+
     const user = await User.create({
       email,
       username,

@@ -148,6 +148,23 @@ export default class UsersController {
     const { username, displayName, backdropMode, backdropColor, backdropImage } =
       await request.validateUsing(updateSchema)
 
+    if (username && username !== user.username) {
+      const existingUserByUsername = await User.findBy('username', username)
+      if (existingUserByUsername) {
+        throw new AppError('Username already used', {
+          status: 409,
+          code: 'AUTH_USERNAME_TAKEN',
+        })
+      }
+
+      if (username.trim().includes(' ')) {
+        throw new AppError('Username cannot contain spaces', {
+          status: 400,
+          code: 'USER_USERNAME_INVALID',
+        })
+      }
+    }
+
     if (backdropMode === 'image') {
       if (user.plan === 'free') {
         throw new AppError('You must be a Plus user to use an image as backdrop for your profile', {
