@@ -19,9 +19,16 @@ export default class BooksController {
     const page = request.input('page', 1)
     const limit = request.input('limit', 20)
     const sort = request.input('sort') as 'top_rated' | 'most_listed' | 'most_tracked' | undefined
-    const nsfw = request.input('nsfw', false)
+    const nsfw =
+      request.input('nsfw', 'false') === 'true' || request.input('nsfw', 'false') === true
 
-    const query = Book.query().preload('authors').select('*').where('nsfw', nsfw)
+    const query = Book.query().preload('authors').select('*')
+
+    // Si nsfw=false, on masque le contenu NSFW
+    // Si nsfw=true, on affiche tout (pas de filtre)
+    if (!nsfw) {
+      query.where('nsfw', false)
+    }
 
     switch (sort) {
       case 'top_rated': {
@@ -103,7 +110,8 @@ export default class BooksController {
     const page = request.input('page', 1)
     const limit = request.input('limit', 20)
     const query = request.input('q')
-    const nsfw = request.input('nsfw', false)
+    const nsfw =
+      request.input('nsfw', 'false') === 'true' || request.input('nsfw', 'false') === true
 
     if (!query) {
       throw new AppError('Search query is required', {
@@ -115,10 +123,15 @@ export default class BooksController {
     const normalizedQuery = query.trim().toLowerCase()
 
     // Utiliser une CTE (Common Table Expression) pour calculer le score de pertinence une seule fois
-    const searchResults = await db
-      .from('books')
-      .where('nsfw', nsfw)
-      .select('books.*')
+    const bookQuery = db.from('books').select('books.*')
+
+    // Si nsfw=false, on masque le contenu NSFW
+    // Si nsfw=true, on affiche tout (pas de filtre)
+    if (!nsfw) {
+      bookQuery.where('nsfw', false)
+    }
+
+    const searchResults = await bookQuery
       .select(
         db.raw(
           `
@@ -191,7 +204,8 @@ export default class BooksController {
   }
 
   async getBySameAuthor({ params, request, response }: HttpContext) {
-    const nsfw = request.input('nsfw', false)
+    const nsfw =
+      request.input('nsfw', 'false') === 'true' || request.input('nsfw', 'false') === true
 
     const book = await Book.find(params.id)
     if (!book) {
@@ -208,9 +222,15 @@ export default class BooksController {
       return response.ok([])
     }
 
-    const books = await Book.query()
-      .whereNot('id', book.id)
-      .where('nsfw', nsfw)
+    const booksQuery = Book.query().whereNot('id', book.id)
+
+    // Si nsfw=false, on masque le contenu NSFW
+    // Si nsfw=true, on affiche tout (pas de filtre)
+    if (!nsfw) {
+      booksQuery.where('nsfw', false)
+    }
+
+    const books = await booksQuery
       .whereExists((existsQuery) => {
         existsQuery
           .from('author_books as ab')
