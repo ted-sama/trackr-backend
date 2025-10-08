@@ -9,6 +9,7 @@ import {
 import BookTracking from '#models/book_tracking'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
+import { ActivityLogger } from '#services/activity_logger'
 
 export default class LibraryController {
   /**
@@ -65,6 +66,13 @@ export default class LibraryController {
     }
 
     await user.related('bookTrackings').create({ bookId: book.id, status: 'plan_to_read' })
+    await ActivityLogger.log({
+      userId: user.id,
+      action: 'book.addedToLibrary',
+      metadata: {},
+      resourceType: 'book',
+      resourceId: book.id,
+    })
 
     return response.created({ message: 'Book added to library', bookId: book.id })
   }
@@ -96,6 +104,13 @@ export default class LibraryController {
     }
 
     await bookTracking.delete()
+    await ActivityLogger.log({
+      userId: user.id,
+      action: 'book.removedFromLibrary',
+      metadata: {},
+      resourceType: 'book',
+      resourceId: book.id,
+    })
 
     return response.noContent()
   }
@@ -151,6 +166,18 @@ export default class LibraryController {
 
     bookTracking.merge({ rating, currentChapter, currentVolume, status, notes })
     await bookTracking.save()
+    // log activity for each field that was updated
+    Object.entries(payload).forEach(async ([field, value]) => {
+      if (value) {
+        await ActivityLogger.log({
+          userId: user.id,
+          action: `book.${field}Updated`,
+          metadata: { [field]: value },
+          resourceType: 'book',
+          resourceId: book.id,
+        })
+      }
+    })
 
     const updatedBookTracking = await BookTracking.query()
       .where('book_id', book.id)
@@ -205,6 +232,14 @@ export default class LibraryController {
       },
     })
 
+    await ActivityLogger.log({
+      userId: user.id,
+      action: 'book.addedToFavorites',
+      metadata: {},
+      resourceType: 'book',
+      resourceId: book.id,
+    })
+
     return response.ok({ message: 'Book added to top books' })
   }
 
@@ -239,6 +274,14 @@ export default class LibraryController {
       'UPDATE users_top_books SET position = position - 1, updated_at = ? WHERE user_id = ? AND position > ?',
       [new Date(), user.id, removedPosition]
     )
+
+    await ActivityLogger.log({
+      userId: user.id,
+      action: 'book.removedFromFavorites',
+      metadata: {},
+      resourceType: 'book',
+      resourceId: book.id,
+    })
 
     return response.ok({ message: 'Book removed from top books' })
   }

@@ -12,6 +12,8 @@ import { cuid } from '@adonisjs/core/helpers'
 import User from '#models/user'
 import db from '@adonisjs/lucid/services/db'
 import AppError from '#exceptions/app_error'
+import ActivityLog from '#models/activity_log'
+import { ActivityLogEnricher } from '#services/activity_log_enricher'
 
 export default class UsersController {
   /**
@@ -323,5 +325,48 @@ export default class UsersController {
     }
 
     return response.noContent()
+  }
+
+  async showMyActivity({ auth, request, response }: HttpContext) {
+    const { page = 1, limit = 10 } = request.qs()
+    const user = await auth.authenticate()
+    const activity = await ActivityLog.query()
+      .where('user_id', user.id)
+      .orderBy('created_at', 'desc')
+      .paginate(page, limit)
+
+    // Enrichir les logs avec les ressources
+    const enrichedData = await ActivityLogEnricher.enrich(activity.all())
+
+    return response.ok({
+      ...activity.toJSON(),
+      data: enrichedData,
+    })
+  }
+
+  async showUserActivity({ request, response }: HttpContext) {
+    const { page = 1, limit = 10 } = request.qs()
+    const { params } = await request.validateUsing(showSchema)
+    const { username } = params
+    const user = await User.query().where('username', username).first()
+
+    if (!user) {
+      throw new AppError('User not found', {
+        status: 404,
+        code: 'USER_NOT_FOUND',
+      })
+    }
+    const activity = await ActivityLog.query()
+      .where('user_id', user.id)
+      .orderBy('created_at', 'desc')
+      .paginate(page, limit)
+
+    // Enrichir les logs avec les ressources
+    const enrichedData = await ActivityLogEnricher.enrich(activity.all())
+
+    return response.ok({
+      ...activity.toJSON(),
+      data: enrichedData,
+    })
   }
 }

@@ -53,6 +53,7 @@ router
     router.post('/top/:bookId', [LibraryController, 'addToTopBooks'])
     router.delete('/top/:bookId', [LibraryController, 'removeFromTopBooks'])
     router.put('/top/reorder', [UsersController, 'reorderTopBooks'])
+    router.get('/activity', [UsersController, 'showMyActivity'])
   })
   .prefix('me')
 
@@ -61,6 +62,7 @@ router
     router.get('/:username', [UsersController, 'show'])
     router.get('/:username/top', [UsersController, 'showUserTopBooks'])
     router.get('/:username/lists', [UsersController, 'showUserLists'])
+    router.get('/:username/activity', [UsersController, 'showUserActivity'])
   })
   .prefix('users')
 
