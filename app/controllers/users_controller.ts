@@ -145,7 +145,7 @@ export default class UsersController {
 
   async update({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
-    const { username, displayName, backdropMode, backdropColor, backdropImage } =
+    const { username, displayName, backdropMode, backdropColor } =
       await request.validateUsing(updateSchema)
 
     if (username && username !== user.username) {
@@ -174,7 +174,11 @@ export default class UsersController {
       }
     }
 
-    await user.merge({ username, displayName, backdropMode, backdropColor, backdropImage }).save()
+    if (backdropMode === 'color') {
+      user.merge({ backdropImage: null })
+    }
+
+    await user.merge({ username, displayName, backdropMode, backdropColor }).save()
     return response.ok(user)
   }
 
