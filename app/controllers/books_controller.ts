@@ -122,8 +122,7 @@ export default class BooksController {
 
     const normalizedQuery = query.trim().toLowerCase()
 
-    // Utiliser une CTE (Common Table Expression) pour calculer le score de pertinence une seule fois
-    const bookQuery = db.from('books').select('books.*')
+    const bookQuery = Book.query().select('*')
 
     // Si nsfw=false, on masque le contenu NSFW
     // Si nsfw=true, on affiche tout (pas de filtre)
@@ -170,35 +169,9 @@ export default class BooksController {
               .whereILike('a.name', `%${normalizedQuery}%`)
           })
       })
+      .preload('authors')
       .orderByRaw('relevance_score DESC, rating_count DESC NULLS LAST, rating DESC NULLS LAST')
       .paginate(page, limit)
-
-    // Charger les auteurs pour tous les livres retournés
-    const bookIds = searchResults.map((book) => book.id)
-    if (bookIds.length > 0) {
-      const authorsData = await db
-        .from('authors')
-        .innerJoin('author_books', 'author_books.author_id', 'authors.id')
-        .whereIn('author_books.book_id', bookIds)
-        .select('authors.*', 'author_books.book_id')
-
-      // Grouper les auteurs par book_id
-      const authorsByBookId = authorsData.reduce(
-        (acc, author) => {
-          if (!acc[author.book_id]) {
-            acc[author.book_id] = []
-          }
-          acc[author.book_id].push(author)
-          return acc
-        },
-        {} as Record<number, any[]>
-      )
-
-      // Ajouter les auteurs à chaque livre
-      searchResults.forEach((book) => {
-        book.authors = authorsByBookId[book.id] || []
-      })
-    }
 
     return response.ok(searchResults)
   }
