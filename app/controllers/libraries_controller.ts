@@ -164,41 +164,23 @@ export default class LibraryController {
     const oldVolume = bookTracking.currentVolume
 
     // Déterminer le statut automatiquement
-    let finalStatus = bookTracking.status
+    let finalStatus = status || bookTracking.status
 
-    // Si l'utilisateur a explicitement défini un statut, on le respecte (priorité maximale)
-    if (status !== undefined) {
-      finalStatus = status
-    } else {
-      // Sinon, on applique les automatisations intelligentes
+    // Auto-complétion : si on atteint le max de chapitres ou volumes, passer en 'completed'
+    const hasReachedMaxChapters = book.chapters !== null && newChapter === book.chapters
+    const hasReachedMaxVolumes = book.volumes !== null && newVolume === book.volumes
 
-      // 1. Si on est en 'completed' mais qu'on baisse les chapitres/volumes, repasser en 'reading'
-      if (bookTracking.status === 'completed') {
-        const isBelowMaxChapters =
-          book.chapters !== null && newChapter !== null && newChapter < book.chapters
-        const isBelowMaxVolumes =
-          book.volumes !== null && newVolume !== null && newVolume < book.volumes
-
-        if (isBelowMaxChapters || isBelowMaxVolumes) {
-          finalStatus = 'reading'
-        }
-      }
-
-      // 2. Auto-complétion : si on atteint le max de chapitres ou volumes, passer en 'completed'
-      const hasReachedMaxChapters = book.chapters !== null && newChapter === book.chapters
-      const hasReachedMaxVolumes = book.volumes !== null && newVolume === book.volumes
-
-      if (hasReachedMaxChapters || hasReachedMaxVolumes) {
-        finalStatus = 'completed'
-      }
-      // 3. Auto-reading : si on met un chapitre/volume > 0 depuis 'plan_to_read', passer en 'reading'
-      else if (
-        ((currentChapter !== undefined && currentChapter > 0) ||
-          (currentVolume !== undefined && currentVolume > 0)) &&
-        bookTracking.status === 'plan_to_read'
-      ) {
-        finalStatus = 'reading'
-      }
+    if (hasReachedMaxChapters || hasReachedMaxVolumes) {
+      finalStatus = 'completed'
+    }
+    // Auto-reading : si on met un chapitre/volume > 0 depuis 'plan_to_read', passer en 'reading'
+    else if (
+      ((currentChapter !== undefined && currentChapter > 0) ||
+        (currentVolume !== undefined && currentVolume > 0)) &&
+      bookTracking.status === 'plan_to_read' &&
+      finalStatus === 'plan_to_read'
+    ) {
+      finalStatus = 'reading'
     }
 
     dataToUpdate.status = finalStatus
