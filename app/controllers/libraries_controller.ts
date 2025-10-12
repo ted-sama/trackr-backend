@@ -90,20 +90,18 @@ export default class LibraryController {
     const user = await auth.authenticate()
     const book = await Book.findOrFail(params.bookId)
 
-    const bookTracking = await user
-      .related('bookTrackings')
-      .query()
+    const deletedTracking = await BookTracking.query()
+      .where('user_id', user.id)
       .where('book_id', book.id)
-      .firstOrFail()
+      .delete()
 
-    if (!bookTracking) {
+    if (deletedTracking.length === 0) {
       throw new AppError('Book not found in library', {
         status: 404,
         code: 'BOOK_NOT_FOUND_IN_LIBRARY',
       })
     }
 
-    await bookTracking.delete()
     await ActivityLogger.log({
       userId: user.id,
       action: 'book.removedFromLibrary',
