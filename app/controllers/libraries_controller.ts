@@ -6,6 +6,7 @@ import {
   removeFromTopBooksValidator,
   updateLibraryValidator,
 } from '#validators/library'
+import BookTracking from '#models/book_tracking'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import { ActivityLogger } from '#services/activity_logger'
@@ -129,7 +130,7 @@ export default class LibraryController {
     const user = await auth.authenticate()
     const book = await Book.findOrFail(params.bookId)
     const payload = await request.validateUsing(updateLibraryValidator)
-    const { rating, currentChapter, currentVolume, status, notes } = payload
+    const { rating, currentChapter, currentVolume, status } = payload
 
     const bookTracking = await user
       .related('bookTrackings')
@@ -144,27 +145,32 @@ export default class LibraryController {
       })
     }
 
+    const dataToUpdate: { [key: string]: any } = { ...payload }
+
     if (status === 'reading' && bookTracking.status !== 'reading') {
-      bookTracking.merge({ startDate: DateTime.now() })
+      dataToUpdate.startDate = DateTime.now()
     }
 
     if (status === 'completed' && bookTracking.status !== 'completed') {
-      bookTracking.merge({ finishDate: DateTime.now() })
+      dataToUpdate.finishDate = DateTime.now()
     }
 
-    if (rating && rating === 0) {
-      bookTracking.merge({ rating: null })
+    if (rating !== undefined && rating === 0) {
+      dataToUpdate.rating = null
     }
 
     if (
       (currentChapter && currentChapter !== bookTracking.currentChapter) ||
       (currentVolume && currentVolume !== bookTracking.currentVolume)
     ) {
-      bookTracking.merge({ lastReadAt: DateTime.now() })
+      dataToUpdate.lastReadAt = DateTime.now()
     }
 
-    bookTracking.merge({ rating, currentChapter, currentVolume, status, notes })
-    await bookTracking.save()
+    await BookTracking.query()
+      .where('user_id', user.id)
+      .where('book_id', book.id)
+      .update(dataToUpdate)
+
     // log activity for each field that was updated
     Object.entries(payload).forEach(async ([field, value]) => {
       if (value) {
@@ -178,10 +184,9 @@ export default class LibraryController {
       }
     })
 
-    const updatedBookTracking = await user
-      .related('bookTrackings')
-      .query()
+    const updatedBookTracking = await BookTracking.query()
       .where('book_id', book.id)
+      .where('user_id', user.id)
       .preload('book', (bookQuery) => {
         bookQuery.preload('authors')
       })
