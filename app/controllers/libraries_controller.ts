@@ -179,7 +179,9 @@ export default class LibraryController {
       }
     })
 
-    const updatedBookTracking = await BookTracking.query()
+    const updatedBookTracking = await user
+      .related('bookTrackings')
+      .query()
       .where('book_id', book.id)
       .preload('book', (bookQuery) => {
         bookQuery.preload('authors')
