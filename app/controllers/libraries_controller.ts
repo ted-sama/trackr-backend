@@ -6,7 +6,6 @@ import {
   removeFromTopBooksValidator,
   updateLibraryValidator,
 } from '#validators/library'
-import BookTracking from '#models/book_tracking'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import { ActivityLogger } from '#services/activity_logger'
