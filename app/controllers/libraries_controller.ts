@@ -128,6 +128,7 @@ export default class LibraryController {
     const user = await auth.authenticate()
     const book = await Book.findOrFail(params.bookId)
     const payload = await request.validateUsing(updateLibraryValidator)
+    const { rating, currentChapter, currentVolume, status } = payload
 
     const bookTracking = await user
       .related('bookTrackings')
@@ -142,120 +143,25 @@ export default class LibraryController {
       })
     }
 
-    const { rating, currentChapter, currentVolume, status, notes } = payload
+    const dataToUpdate: { [key: string]: any } = { ...payload }
 
-    const dataToUpdate: Record<string, any> = {}
-
-    if (notes !== undefined) {
-      dataToUpdate.notes = notes
+    if (status === 'reading' && bookTracking.status !== 'reading') {
+      dataToUpdate.startDate = DateTime.now()
     }
 
-    if (rating !== undefined) {
-      dataToUpdate.rating = rating === 0 ? null : rating
+    if (status === 'completed' && bookTracking.status !== 'completed') {
+      dataToUpdate.finishDate = DateTime.now()
     }
 
-    const chapterProvided = currentChapter !== undefined
-    const volumeProvided = currentVolume !== undefined
-    const previousChapter = bookTracking.currentChapter
-    const previousVolume = bookTracking.currentVolume
-
-    if (chapterProvided) {
-      dataToUpdate.currentChapter = currentChapter
+    if (rating !== undefined && rating === 0) {
+      dataToUpdate.rating = null
     }
 
-    if (volumeProvided) {
-      dataToUpdate.currentVolume = currentVolume
-    }
-
-    const chapterChanged = chapterProvided && currentChapter !== previousChapter
-    const volumeChanged = volumeProvided && currentVolume !== previousVolume
-    const progressUpdated = chapterChanged || volumeChanged
-
-    const newChapter = chapterProvided ? currentChapter : previousChapter
-    const newVolume = volumeProvided ? currentVolume : previousVolume
-
-    const hasProgress =
-      (typeof newChapter === 'number' && newChapter > 0) ||
-      (typeof newVolume === 'number' && newVolume > 0)
-
-    const maxChapterReached =
-      typeof newChapter === 'number' && book.chapters !== null && newChapter >= book.chapters
-
-    const maxVolumeReached =
-      typeof newVolume === 'number' && book.volumes !== null && newVolume >= book.volumes
-
-    const progressAtMax = maxChapterReached || maxVolumeReached
-
-    let resolvedStatus = status ?? bookTracking.status
-    let autoAssignedStatus = false
-
-    if (status === undefined) {
-      if (progressUpdated && progressAtMax) {
-        resolvedStatus = 'completed'
-        autoAssignedStatus = true
-      } else if (progressUpdated && hasProgress) {
-        resolvedStatus = 'reading'
-        autoAssignedStatus = true
-      }
-    }
-
-    if (progressUpdated) {
-      if (
-        (typeof newChapter === 'number' && newChapter > 0) ||
-        (typeof newVolume === 'number' && newVolume > 0)
-      ) {
-        dataToUpdate.lastReadAt = DateTime.now()
-      } else {
-        dataToUpdate.lastReadAt = null
-      }
-    }
-
-    const statusWasExplicitlyProvided = status !== undefined
-    const shouldApplyStatusSideEffects =
-      statusWasExplicitlyProvided || autoAssignedStatus || resolvedStatus !== bookTracking.status
-
-    if (shouldApplyStatusSideEffects) {
-      const now = DateTime.now()
-
-      dataToUpdate.status = resolvedStatus
-
-      switch (resolvedStatus) {
-        case 'plan_to_read':
-          dataToUpdate.startDate = null
-          dataToUpdate.finishDate = null
-          dataToUpdate.lastReadAt = null
-          dataToUpdate.currentChapter = null
-          dataToUpdate.currentVolume = null
-          break
-        case 'reading':
-          if ((dataToUpdate.startDate ?? bookTracking.startDate) === null) {
-            dataToUpdate.startDate = now
-          }
-          dataToUpdate.finishDate = null
-          break
-        case 'completed':
-          if (book.chapters !== null) {
-            dataToUpdate.currentChapter = book.chapters
-          }
-          if (book.volumes !== null) {
-            dataToUpdate.currentVolume = book.volumes
-          }
-          if ((dataToUpdate.startDate ?? bookTracking.startDate) === null) {
-            dataToUpdate.startDate = now
-          }
-          dataToUpdate.finishDate = now
-          if (dataToUpdate.lastReadAt === undefined) {
-            dataToUpdate.lastReadAt = now
-          }
-          break
-        default:
-          dataToUpdate.finishDate = null
-          break
-      }
-    }
-
-    if (Object.keys(dataToUpdate).length === 0) {
-      return response.ok(bookTracking)
+    if (
+      (currentChapter && currentChapter !== bookTracking.currentChapter) ||
+      (currentVolume && currentVolume !== bookTracking.currentVolume)
+    ) {
+      dataToUpdate.lastReadAt = DateTime.now()
     }
 
     await BookTracking.query()
