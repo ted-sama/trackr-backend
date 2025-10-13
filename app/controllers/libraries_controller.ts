@@ -234,10 +234,10 @@ export default class LibraryController {
           dataToUpdate.finishDate = null
           break
         case 'completed':
-          if (book.chapters !== null) {
+          if ((autoAssignedStatus || !chapterProvided) && book.chapters !== null) {
             dataToUpdate.currentChapter = book.chapters
           }
-          if (book.volumes !== null) {
+          if ((autoAssignedStatus || !volumeProvided) && book.volumes !== null) {
             dataToUpdate.currentVolume = book.volumes
           }
           if ((dataToUpdate.startDate ?? bookTracking.startDate) === null) {
