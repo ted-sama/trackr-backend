@@ -74,6 +74,7 @@ export default class UsersController {
       .related('topBooks')
       .query()
       .orderBy('users_top_books.position', 'asc')
+      .preload('authors')
 
     return response.ok(topBooks)
   }
