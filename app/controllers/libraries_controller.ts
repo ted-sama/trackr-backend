@@ -144,24 +144,78 @@ export default class LibraryController {
     }
 
     const dataToUpdate: { [key: string]: any } = { ...payload }
+    const now = DateTime.now()
 
-    if (status === 'reading' && bookTracking.status !== 'reading') {
-      dataToUpdate.startDate = DateTime.now()
-    }
-
-    if (status === 'completed' && bookTracking.status !== 'completed') {
-      dataToUpdate.finishDate = DateTime.now()
-    }
-
+    // Traitement du rating (0 = null)
     if (rating !== undefined && rating === 0) {
       dataToUpdate.rating = null
     }
 
+    // Logique d'automatisation basée sur les chapitres/volumes
+    let shouldAutoSetReading = false
+    let shouldAutoSetCompleted = false
+
+    // Vérifier si on doit automatiquement passer en 'reading'
     if (
-      (currentChapter && currentChapter !== bookTracking.currentChapter) ||
-      (currentVolume && currentVolume !== bookTracking.currentVolume)
+      ((currentChapter !== undefined && currentChapter > 0) ||
+        (currentVolume !== undefined && currentVolume > 0)) &&
+      bookTracking.status !== 'reading'
     ) {
-      dataToUpdate.lastReadAt = DateTime.now()
+      shouldAutoSetReading = true
+    }
+
+    // Vérifier si on doit automatiquement passer en 'completed'
+    if (
+      (book.chapters !== null && currentChapter !== undefined && currentChapter >= book.chapters) ||
+      (book.volumes !== null && currentVolume !== undefined && currentVolume >= book.volumes)
+    ) {
+      shouldAutoSetCompleted = true
+    }
+
+    // Appliquer les automatisations seulement si aucun statut explicite n'est fourni
+    if (status === undefined) {
+      if (shouldAutoSetCompleted) {
+        dataToUpdate.status = 'completed'
+      } else if (shouldAutoSetReading) {
+        dataToUpdate.status = 'reading'
+      }
+    }
+
+    // Gestion des dates selon les changements de statut
+    const newStatus = dataToUpdate.status || bookTracking.status
+
+    // Gestion de startDate
+    if (newStatus === 'reading' && bookTracking.status !== 'reading') {
+      dataToUpdate.startDate = now
+    } else if (newStatus === 'plan_to_read' && bookTracking.status !== 'plan_to_read') {
+      // Réinitialiser les dates quand on passe en plan_to_read
+      dataToUpdate.startDate = null
+      dataToUpdate.finishDate = null
+      dataToUpdate.currentChapter = null
+      dataToUpdate.currentVolume = null
+    }
+
+    // Gestion de finishDate
+    if (newStatus === 'completed' && bookTracking.status !== 'completed') {
+      dataToUpdate.finishDate = now
+      // Si on passe en completed automatiquement, s'assurer que les chapitres/volumes sont au max
+      if (book.chapters !== null && currentChapter !== undefined) {
+        dataToUpdate.currentChapter = book.chapters
+      }
+      if (book.volumes !== null && currentVolume !== undefined) {
+        dataToUpdate.currentVolume = book.volumes
+      }
+    } else if (newStatus !== 'completed' && bookTracking.status === 'completed') {
+      // Si on sort du statut completed, réinitialiser finishDate
+      dataToUpdate.finishDate = null
+    }
+
+    // Gestion de lastReadAt
+    if (
+      (currentChapter !== undefined && currentChapter !== bookTracking.currentChapter) ||
+      (currentVolume !== undefined && currentVolume !== bookTracking.currentVolume)
+    ) {
+      dataToUpdate.lastReadAt = now
     }
 
     await BookTracking.query()
@@ -169,9 +223,9 @@ export default class LibraryController {
       .where('book_id', book.id)
       .update(dataToUpdate)
 
-    // log activity for each field that was updated
+    // Log activity for each field that was updated
     Object.entries(payload).forEach(async ([field, value]) => {
-      if (value) {
+      if (value !== undefined) {
         await ActivityLogger.log({
           userId: user.id,
           action: `book.${field}Updated`,
