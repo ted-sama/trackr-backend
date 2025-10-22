@@ -43,6 +43,9 @@ export default await Env.create(new URL('../', import.meta.url), {
   // Gemini
   GEMINI_API_KEY: Env.schema.string(),
 
+  // OpenRouter
+  OPENROUTER_API_KEY: Env.schema.string(),
+
   /*
   |----------------------------------------------------------
   | Variables for configuring the drive package

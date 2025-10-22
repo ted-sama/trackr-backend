@@ -15,6 +15,7 @@ const UsersController = () => import('#controllers/users_controller')
 const ListsController = () => import('#controllers/lists_controller')
 const LibraryController = () => import('#controllers/libraries_controller')
 const RecapController = () => import('#controllers/recap_controller')
+const ChatsController = () => import('#controllers/chats_controller')
 
 import AutoSwagger from 'adonis-autoswagger'
 import swagger from '#config/swagger'
@@ -98,3 +99,9 @@ router
     router.put('/:id/backdrop', [ListsController, 'uploadBackdropImage'])
   })
   .prefix('lists')
+
+router
+  .group(() => {
+    router.post('/', [ChatsController, 'stream'])
+  })
+  .prefix('chat')
