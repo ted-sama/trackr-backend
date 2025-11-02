@@ -102,6 +102,6 @@ router
 
 router
   .group(() => {
-    router.post('/', [ChatsController, 'stream'])
+    router.post('/:bookId', [ChatsController, 'stream'])
   })
   .prefix('chat')
