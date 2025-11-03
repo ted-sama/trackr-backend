@@ -43,6 +43,7 @@ export default class UsersController {
           'backdropMode',
           'backdropColor',
           'backdropImage',
+          'createdAt',
         ],
       },
     })
