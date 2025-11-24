@@ -10,6 +10,7 @@ import BookTracking from '#models/book_tracking'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import { ActivityLogger } from '#services/activity_logger'
+import ActivityLog from '#models/activity_log'
 
 export default class LibraryController {
   /**
@@ -162,6 +163,37 @@ export default class LibraryController {
       (currentVolume && currentVolume !== bookTracking.currentVolume)
     ) {
       dataToUpdate.lastReadAt = DateTime.now()
+    }
+
+    // Handle deletion of activity logs when chapter/volume count decreases
+    if (
+      currentChapter !== undefined &&
+      bookTracking.currentChapter !== null &&
+      currentChapter < bookTracking.currentChapter
+    ) {
+      // Delete activity logs for chapters that are being unmarked as read
+      await ActivityLog.query()
+        .where('user_id', user.id)
+        .where('resource_type', 'book')
+        .where('resource_id', book.id.toString())
+        .where('action', 'book.currentChapterUpdated')
+        .whereRaw("CAST(metadata->>'currentChapter' AS INTEGER) > ?", [currentChapter])
+        .delete()
+    }
+
+    if (
+      currentVolume !== undefined &&
+      bookTracking.currentVolume !== null &&
+      currentVolume < bookTracking.currentVolume
+    ) {
+      // Delete activity logs for volumes that are being unmarked as read
+      await ActivityLog.query()
+        .where('user_id', user.id)
+        .where('resource_type', 'book')
+        .where('resource_id', book.id.toString())
+        .where('action', 'book.currentVolumeUpdated')
+        .whereRaw("CAST(metadata->>'currentVolume' AS INTEGER) > ?", [currentVolume])
+        .delete()
     }
 
     await BookTracking.query()
