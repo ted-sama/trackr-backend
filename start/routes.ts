@@ -62,6 +62,7 @@ router
 
 router
   .group(() => {
+    router.get('/search', [UsersController, 'search'])
     router.get('/:username', [UsersController, 'show'])
     router.get('/:username/top', [UsersController, 'showUserTopBooks'])
     router.get('/:username/lists', [UsersController, 'showUserLists'])

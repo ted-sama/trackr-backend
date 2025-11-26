@@ -28,6 +28,47 @@ export default class UsersController {
     return response.ok(user)
   }
 
+  /**
+   * @summary Search users
+   * @tag Users
+   * @description Search for users by username or display name
+   * @paramQuery q - Search query - @type(string) @required
+   * @paramQuery page - Page number for pagination - @type(number)
+   * @paramQuery limit - Number of items per page (max 50) - @type(number)
+   * @responseBody 200 - <User[]>.paginated() - List of users matching the search query
+   */
+  async search({ request, response }: HttpContext) {
+    const q = request.input('q', '')
+    const page = request.input('page', 1)
+    const limit = Math.min(request.input('limit', 10), 50)
+
+    if (!q || q.trim().length === 0) {
+      return response.ok({
+        meta: { total: 0, per_page: limit, current_page: page, last_page: 0 },
+        data: [],
+      })
+    }
+
+    const normalizedQuery = q.trim().toLowerCase()
+
+    const queryBuilder = User.query().where((qb) => {
+      qb.whereRaw('LOWER(username) = ?', [normalizedQuery])
+        .orWhereILike('username', `%${normalizedQuery}%`)
+        .orWhereRaw('LOWER(display_name) = ?', [normalizedQuery])
+        .orWhereILike('display_name', `%${normalizedQuery}%`)
+    })
+
+    const paginated = await queryBuilder.orderBy('username', 'asc').paginate(page, limit)
+
+    const users = paginated.serialize({
+      fields: {
+        pick: ['id', 'username', 'displayName', 'avatar', 'plan', 'createdAt'],
+      },
+    })
+
+    return response.ok(users)
+  }
+
   async show({ request, response }: HttpContext) {
     const { params } = await request.validateUsing(showSchema)
     const { username } = params
