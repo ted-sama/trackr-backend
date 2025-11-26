@@ -1,6 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
 import BookTracking from '#models/book_tracking'
+import User from '#models/user'
 // import ActivityLog from '#models/activity_log'
 // import Book from '#models/book'
 
@@ -11,6 +12,48 @@ export default class StatsController {
    */
   async index({ auth, response }: HttpContext) {
     const user = await auth.authenticate()
+
+    // 1. Overview Stats
+    const overview = await this.getOverviewStats(user.id)
+
+    // 2. Distributions
+    const distributions = await this.getDistributions(user.id)
+
+    // 3. Activity History
+    const activity = await this.getActivityStats(user.id)
+
+    // 4. Preferences
+    const preferences = await this.getPreferences(user.id)
+
+    // 5. Series Stats
+    const series = await this.getSeriesStats(user.id)
+
+    // 6. Authors
+    const authors = await this.getTopAuthors(user.id)
+
+    // 7. Completion Funnel
+    const funnel = await this.getCompletionFunnel(user.id)
+
+    return response.ok({
+      overview,
+      distributions,
+      activity,
+      preferences,
+      series,
+      authors,
+      funnel,
+    })
+  }
+
+  /**
+   * @summary Get any user's statistics by username
+   * @description Returns various statistics about a specific user's reading habits
+   */
+  async showUserStats({ params, response }: HttpContext) {
+    const user = await User.findBy('username', params.username)
+    if (!user) {
+      return response.notFound({ message: 'User not found' })
+    }
 
     // 1. Overview Stats
     const overview = await this.getOverviewStats(user.id)
@@ -290,19 +333,25 @@ export default class StatsController {
       .groupBy('status')
       .select('status', db.raw('count(*) as count'))
 
-    const counts = statusCounts.reduce(
-      (acc, row) => {
-        acc[row.status] = Number(row.count)
-        return acc
-      },
-      {} as Record<string, number>
-    )
+    // Initialize all possible statuses with 0
+    const counts: Record<string, number> = {
+      plan_to_read: 0,
+      reading: 0,
+      completed: 0,
+      on_hold: 0,
+      dropped: 0,
+    }
 
-    const planToRead = counts['plan_to_read'] || 0
-    const reading = counts['reading'] || 0
-    const completed = counts['completed'] || 0
-    const onHold = counts['on_hold'] || 0
-    const dropped = counts['dropped'] || 0
+    // Update with actual counts from database
+    statusCounts.forEach((row) => {
+      counts[row.status] = Number(row.count)
+    })
+
+    const planToRead = counts['plan_to_read']
+    const reading = counts['reading']
+    const completed = counts['completed']
+    const onHold = counts['on_hold']
+    const dropped = counts['dropped']
 
     const totalLibrary = planToRead + reading + completed + onHold + dropped
     const started = reading + completed + onHold + dropped // Books that left 'plan' (assuming they started there)

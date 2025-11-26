@@ -11,6 +11,7 @@ import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import { ActivityLogger } from '#services/activity_logger'
 import ActivityLog from '#models/activity_log'
+import User from '#models/user'
 
 export default class LibraryController {
   /**
@@ -24,6 +25,36 @@ export default class LibraryController {
    */
   async index({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
+    const page = request.input('page', 1)
+    const limit = request.input('limit', 10)
+
+    const library = await user
+      .related('bookTrackings')
+      .query()
+      .preload('book', (bookQuery) => {
+        bookQuery.preload('authors')
+      })
+      .paginate(page, limit)
+
+    return response.ok(library)
+  }
+
+  /**
+   * @summary Get any user's library by username
+   * @tag Library
+   * @description Returns a specific user's library with reading progress and tracking information
+   * @paramPath username - Username - @type(string) @required
+   * @paramQuery page - Page number for pagination - @type(number)
+   * @paramQuery limit - Number of items per page - @type(number)
+   * @responseBody 200 - <BookTracking[]>.with(book).paginated() - User's library with book tracking
+   * @responseBody 404 - User not found
+   */
+  async showUserBooks({ params, request, response }: HttpContext) {
+    const user = await User.findBy('username', params.username)
+    if (!user) {
+      return response.notFound({ message: 'User not found' })
+    }
+
     const page = request.input('page', 1)
     const limit = request.input('limit', 10)
 

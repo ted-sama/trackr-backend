@@ -66,6 +66,8 @@ router
     router.get('/:username/top', [UsersController, 'showUserTopBooks'])
     router.get('/:username/lists', [UsersController, 'showUserLists'])
     router.get('/:username/activity', [UsersController, 'showUserActivity'])
+    router.get('/:username/stats', [StatsController, 'showUserStats'])
+    router.get('/:username/books', [LibraryController, 'showUserBooks'])
   })
   .prefix('users')
 
