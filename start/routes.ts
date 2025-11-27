@@ -102,6 +102,10 @@ router
     router.delete('/:id/books', [ListsController, 'removeBook'])
     router.put('/:id/books/reorder', [ListsController, 'reorderList'])
     router.put('/:id/backdrop', [ListsController, 'uploadBackdropImage'])
+    router.post('/:id/like', [ListsController, 'like'])
+    router.delete('/:id/like', [ListsController, 'unlike'])
+    router.post('/:id/save', [ListsController, 'saveList'])
+    router.delete('/:id/save', [ListsController, 'unsaveList'])
   })
   .prefix('lists')
 

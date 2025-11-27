@@ -91,3 +91,19 @@ export const updateBackdropSchema = vine.compile(
     }),
   })
 )
+
+export const likeSchema = vine.compile(
+  vine.object({
+    params: vine.object({
+      id: vine.number().positive(),
+    }),
+  })
+)
+
+export const saveListSchema = vine.compile(
+  vine.object({
+    params: vine.object({
+      id: vine.number().positive(),
+    }),
+  })
+)

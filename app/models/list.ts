@@ -93,6 +93,26 @@ export default class List extends BaseModel {
   })
   declare bookItems: ManyToMany<typeof Book>
 
+  @manyToMany(() => User, {
+    pivotTable: 'list_likes',
+    pivotTimestamps: {
+      createdAt: 'created_at',
+      updatedAt: false,
+    },
+    serializeAs: null,
+  })
+  declare likedBy: ManyToMany<typeof User>
+
+  @manyToMany(() => User, {
+    pivotTable: 'user_saved_lists',
+    pivotTimestamps: {
+      createdAt: 'created_at',
+      updatedAt: false,
+    },
+    serializeAs: null,
+  })
+  declare savedBy: ManyToMany<typeof User>
+
   @computed()
   get books() {
     if (!this.$preloaded.bookItems) {
@@ -103,5 +123,27 @@ export default class List extends BaseModel {
       total: this.bookItems.length,
       items: this.bookItems.map((book) => book.serialize()),
     }
+  }
+
+  @computed()
+  get likesCount() {
+    if (!this.$preloaded.likedBy) {
+      return 0
+    }
+    return this.likedBy.length
+  }
+
+  public isLikedBy(userId: string): boolean {
+    if (!this.$preloaded.likedBy) {
+      return false
+    }
+    return this.likedBy.some((user) => user.id === userId)
+  }
+
+  public isSavedBy(userId: string): boolean {
+    if (!this.$preloaded.savedBy) {
+      return false
+    }
+    return this.savedBy.some((user) => user.id === userId)
   }
 }

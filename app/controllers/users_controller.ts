@@ -15,6 +15,18 @@ import AppError from '#exceptions/app_error'
 import ActivityLog from '#models/activity_log'
 import { ActivityLogEnricher } from '#services/activity_log_enricher'
 
+function enrichListWithUserContext(list: any, lists: List[], userId: string | null) {
+  const listModel = lists.find((l) => l.id === list.id)
+  if (listModel && userId) {
+    list.isLikedByMe = listModel.isLikedBy(userId)
+    list.isSavedByMe = listModel.isSavedBy(userId)
+  } else {
+    list.isLikedByMe = false
+    list.isSavedByMe = false
+  }
+  return list
+}
+
 export default class UsersController {
   /**
    * @summary Get current user profile
@@ -121,7 +133,7 @@ export default class UsersController {
     return response.ok(topBooks)
   }
 
-  async showUserLists({ request, response }: HttpContext) {
+  async showUserLists({ auth, request, response }: HttpContext) {
     const { params } = await request.validateUsing(showSchema)
     const { username } = params
     const {
@@ -131,6 +143,7 @@ export default class UsersController {
       order,
       q,
     } = await request.validateUsing(showListsQuerySchema)
+    const currentUser = auth.user ?? null
 
     const userRecord = await User.query().where('username', username).first()
 
@@ -172,8 +185,11 @@ export default class UsersController {
       .preload('bookItems', (bookItemsQuery) => {
         bookItemsQuery.preload('authors')
       })
+      .preload('likedBy')
+      .preload('savedBy')
       .paginate(page, limit)
-    const lists = paginated.serialize({
+
+    const serializedLists = paginated.serialize({
       relations: {
         owner: {
           fields: {
@@ -183,7 +199,11 @@ export default class UsersController {
       },
     })
 
-    return response.ok(lists)
+    serializedLists.data = serializedLists.data.map((list: any) =>
+      enrichListWithUserContext(list, paginated.all(), currentUser?.id ?? null)
+    )
+
+    return response.ok(serializedLists)
   }
 
   async update({ auth, request, response }: HttpContext) {
@@ -309,7 +329,11 @@ export default class UsersController {
       q,
     } = await request.validateUsing(showListsQuerySchema)
 
-    const queryBuilder = List.query().where('user_id', user.id)
+    const queryBuilder = List.query().where((builder) => {
+      builder.where('user_id', user.id).orWhereHas('savedBy', (savedByQuery) => {
+        savedByQuery.where('users.id', user.id)
+      })
+    })
 
     if (q && q.trim()) {
       const normalizedQuery = q.trim().toLowerCase()
@@ -340,8 +364,11 @@ export default class UsersController {
       .preload('bookItems', (bookItemsQuery) => {
         bookItemsQuery.preload('authors')
       })
+      .preload('likedBy')
+      .preload('savedBy')
       .paginate(page, limit)
-    const lists = paginated.serialize({
+
+    const serializedLists = paginated.serialize({
       relations: {
         owner: {
           fields: {
@@ -350,7 +377,12 @@ export default class UsersController {
         },
       },
     })
-    return response.ok(lists)
+
+    serializedLists.data = serializedLists.data.map((list: any) =>
+      enrichListWithUserContext(list, paginated.all(), user.id)
+    )
+
+    return response.ok(serializedLists)
   }
 
   async showTopBooks({ auth, response }: HttpContext) {
