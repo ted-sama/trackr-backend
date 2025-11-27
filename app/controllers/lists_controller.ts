@@ -56,7 +56,9 @@ export default class ListsController {
           .as('likes_count')
       )
       .preload('user')
-      .preload('bookItems')
+      .preload('bookItems', (bookItemsQuery) => {
+        bookItemsQuery.preload('authors').preload('publishers')
+      })
       .preload('likedBy')
       .preload('savedBy')
       .orderBy('likes_count', 'desc')
@@ -168,7 +170,7 @@ export default class ListsController {
       .where('is_public', true)
       .preload('user')
       .preload('bookItems', (bookItemsQuery) => {
-        bookItemsQuery.preload('authors')
+        bookItemsQuery.preload('authors').preload('publishers')
       })
       .preload('likedBy')
       .preload('savedBy')
@@ -211,7 +213,7 @@ export default class ListsController {
       .where('id', id)
       .preload('user')
       .preload('bookItems', (bookItemsQuery) => {
-        bookItemsQuery.preload('authors')
+        bookItemsQuery.preload('authors').preload('publishers')
       })
       .preload('likedBy')
       .preload('savedBy')
@@ -268,7 +270,7 @@ export default class ListsController {
       .where('is_public', true)
       .preload('user')
       .preload('bookItems', (bookItemsQuery) => {
-        bookItemsQuery.preload('authors')
+        bookItemsQuery.preload('authors').preload('publishers')
       })
       .preload('likedBy')
       .preload('savedBy')
@@ -324,15 +326,15 @@ export default class ListsController {
       userId: user.id,
     })
 
-    const createdList = (
-      await List.query()
-        .where('id', list.id)
-        .preload('user')
-        .preload('bookItems', (bookItemsQuery) => {
-          bookItemsQuery.preload('authors')
-        })
-        .first()
-    )?.serialize({
+    const createdListModel = await List.query()
+      .where('id', list.id)
+      .preload('user')
+      .preload('bookItems', (bookItemsQuery) => {
+        bookItemsQuery.preload('authors').preload('publishers')
+      })
+      .first()
+
+    const createdList = createdListModel?.serialize({
       relations: {
         owner: {
           fields: {
@@ -396,15 +398,15 @@ export default class ListsController {
       })
       .save()
 
-    const updatedList = (
-      await List.query()
-        .where('id', id)
-        .preload('user')
-        .preload('bookItems', (bookItemsQuery) => {
-          bookItemsQuery.preload('authors')
-        })
-        .first()
-    )?.serialize({
+    const updatedListModel = await List.query()
+      .where('id', id)
+      .preload('user')
+      .preload('bookItems', (bookItemsQuery) => {
+        bookItemsQuery.preload('authors').preload('publishers')
+      })
+      .first()
+
+    const updatedList = updatedListModel?.serialize({
       relations: {
         owner: {
           fields: {

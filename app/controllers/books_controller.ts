@@ -22,7 +22,7 @@ export default class BooksController {
     const nsfw =
       request.input('nsfw', 'false') === 'true' || request.input('nsfw', 'false') === true
 
-    const query = Book.query().preload('authors').select('*')
+    const query = Book.query().preload('authors').preload('publishers').select('*')
 
     // Si nsfw=false, on masque le contenu NSFW
     // Si nsfw=true, on affiche tout (pas de filtre)
@@ -89,7 +89,11 @@ export default class BooksController {
    * @responseBody 404 - {"code": "BOOK_NOT_FOUND", "message": "Book not found"} - Book not found
    */
   async show({ params, response }: HttpContext) {
-    const book = await Book.query().where('id', params.id).preload('authors').first()
+    const book = await Book.query()
+      .where('id', params.id)
+      .preload('authors')
+      .preload('publishers')
+      .first()
     if (!book) {
       throw new AppError('Book not found', {
         status: 404,
@@ -170,6 +174,7 @@ export default class BooksController {
           })
       })
       .preload('authors')
+      .preload('publishers')
       .orderByRaw('relevance_score DESC, rating_count DESC NULLS LAST, rating DESC NULLS LAST')
       .paginate(page, limit)
 
@@ -211,6 +216,7 @@ export default class BooksController {
           .whereIn('ab.author_id', authorIds)
       })
       .preload('authors')
+      .preload('publishers')
       .orderBy('rating', 'desc')
       .limit(5)
 

@@ -5,14 +5,14 @@ import axios from 'axios'
 import { Pool } from 'pg'
 import { z } from 'zod'
 
-const REQUEST_DELAY_MS = Number(process.env.JIKAN_REQUEST_DELAY_MS ?? 1200)
-const START_PAGE = Number(process.env.JIKAN_START_PAGE ?? 1)
-const MAX_PAGES = process.env.JIKAN_MAX_PAGES ? Number(process.env.JIKAN_MAX_PAGES) : undefined
+const REQUEST_DELAY_MS = Number(process.env.ANILIST_REQUEST_DELAY_MS ?? 700)
+const START_PAGE = Number(process.env.ANILIST_START_PAGE ?? 1)
+const MAX_PAGES = process.env.ANILIST_MAX_PAGES ? Number(process.env.ANILIST_MAX_PAGES) : undefined
+const PER_PAGE = 50
 
-const MANGA_API_URL = 'https://api.jikan.moe/v4/manga'
+const GRAPHQL_API_URL = 'https://graphql.anilist.co'
 const RATE_LIMITS = {
-  maxPerSecond: 3,
-  maxPerMinute: 60,
+  maxPerMinute: 90,
 }
 const MAX_FETCH_RETRIES = 5
 const ONE_SECOND = 1000
@@ -35,104 +35,95 @@ const pool = new Pool({
       : undefined,
 })
 
-const MangaSchema = z.object({
-  mal_id: z.number(),
-  title: z.string().nullable().optional(),
-  title_english: z.string().nullable().optional(),
-  title_japanese: z.string().nullable().optional(),
-  titles: z
-    .array(
-      z.object({
-        type: z.string().nullable().optional(),
-        title: z.string().nullable().optional(),
-      })
-    )
-    .optional(),
-  synopsis: z.string().nullable().optional(),
-  images: z
-    .object({
-      webp: z
-        .object({
-          image_url: z.string().nullable().optional(),
-        })
-        .nullable()
-        .optional(),
-      jpg: z
-        .object({
-          image_url: z.string().nullable().optional(),
-        })
-        .nullable()
-        .optional(),
-    })
-    .optional(),
-  type: z.string().nullable().optional(),
-  status: z.string().nullable().optional(),
-  volumes: z.number().nullable().optional(),
-  chapters: z.number().nullable().optional(),
-  score: z.number().nullable().optional(),
-  scored_by: z.number().nullable().optional(),
-  genres: z
-    .array(
-      z.object({
-        name: z.string().nullable().optional(),
-      })
-    )
-    .optional(),
-  themes: z
-    .array(
-      z.object({
-        name: z.string().nullable().optional(),
-      })
-    )
-    .optional(),
-  demographics: z
-    .array(
-      z.object({
-        name: z.string().nullable().optional(),
-      })
-    )
-    .optional(),
-  explicit_genres: z
-    .array(
-      z.object({
-        name: z.string().nullable().optional(),
-      })
-    )
-    .optional(),
-  published: z
-    .object({
-      from: z.string().nullable().optional(),
-      to: z.string().nullable().optional(),
-    })
-    .nullable()
-    .optional(),
-  authors: z
-    .array(
-      z.object({
-        name: z.string().nullable().optional(),
-      })
-    )
-    .optional(),
-  rating: z.string().nullable().optional(),
+const MediaTitleSchema = z.object({
+  romaji: z.string().nullable().optional(),
+  english: z.string().nullable().optional(),
+  native: z.string().nullable().optional(),
 })
 
-const PaginationSchema = z.object({
-  last_visible_page: z.number(),
-  has_next_page: z.boolean(),
+const CoverImageSchema = z.object({
+  extraLarge: z.string().nullable().optional(),
+  large: z.string().nullable().optional(),
+  medium: z.string().nullable().optional(),
+})
+
+const DateSchema = z.object({
+  year: z.number().nullable().optional(),
+  month: z.number().nullable().optional(),
+  day: z.number().nullable().optional(),
+})
+
+const StaffSchema = z.object({
+  edges: z
+    .array(
+      z.object({
+        role: z.string().nullable().optional(),
+        node: z
+          .object({
+            name: z
+              .object({
+                full: z.string().nullable().optional(),
+              })
+              .nullable()
+              .optional(),
+          })
+          .nullable()
+          .optional(),
+      })
+    )
+    .optional(),
+})
+
+const MediaSchema = z.object({
+  id: z.number(),
+  idMal: z.number().nullable().optional(),
+  title: MediaTitleSchema.nullable().optional(),
+  description: z.string().nullable().optional(),
+  coverImage: CoverImageSchema.nullable().optional(),
+  format: z.string().nullable().optional(),
+  status: z.string().nullable().optional(),
+  chapters: z.number().nullable().optional(),
+  volumes: z.number().nullable().optional(),
+  averageScore: z.number().nullable().optional(),
+  genres: z.array(z.string()).nullable().optional(),
+  tags: z
+    .array(
+      z.object({
+        name: z.string(),
+        isMediaSpoiler: z.boolean().nullable().optional(),
+      })
+    )
+    .nullable()
+    .optional(),
+  startDate: DateSchema.nullable().optional(),
+  endDate: DateSchema.nullable().optional(),
+  countryOfOrigin: z.string().nullable().optional(),
+  isAdult: z.boolean().nullable().optional(),
+  staff: StaffSchema.nullable().optional(),
+})
+
+const PageInfoSchema = z.object({
+  currentPage: z.number(),
+  hasNextPage: z.boolean(),
+  perPage: z.number(),
 })
 
 const ApiResponseSchema = z.object({
-  data: z.array(MangaSchema),
-  pagination: PaginationSchema,
+  data: z.object({
+    Page: z.object({
+      pageInfo: PageInfoSchema,
+      media: z.array(MediaSchema),
+    }),
+  }),
 })
 
 const STATUS_MAP: Record<string, 'completed' | 'ongoing' | 'hiatus'> = {
-  'Finished': 'completed',
-  'Publishing': 'ongoing',
-  'On Hiatus': 'hiatus',
+  FINISHED: 'completed',
+  RELEASING: 'ongoing',
+  CANCELLED: 'completed',
+  HIATUS: 'hiatus',
+  NOT_YET_RELEASED: 'ongoing',
 }
-
-const NSFW_RATINGS = new Set(['Rx', 'R+', 'R - 17+'])
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -144,26 +135,23 @@ const waitForRateLimit = async () => {
       rateLimitTimestamps.shift()
     }
 
-    const recentSecond = rateLimitTimestamps.filter((timestamp) => now - timestamp < ONE_SECOND)
     const requestsLastMinute = rateLimitTimestamps.length
     const lastRequestAt = rateLimitTimestamps[rateLimitTimestamps.length - 1]
     const timeSinceLastRequest =
       lastRequestAt !== undefined ? now - lastRequestAt : Number.POSITIVE_INFINITY
     const requiredDelay = REQUEST_DELAY_MS - timeSinceLastRequest
 
-    const underPerSecondLimit = recentSecond.length < RATE_LIMITS.maxPerSecond
     const underPerMinuteLimit = requestsLastMinute < RATE_LIMITS.maxPerMinute
     const spacingSatisfied = requiredDelay <= 0
 
-    if (underPerSecondLimit && underPerMinuteLimit && spacingSatisfied) {
+    if (underPerMinuteLimit && spacingSatisfied) {
       rateLimitTimestamps.push(Date.now())
       return
     }
 
-    const waitForSecond = !underPerSecondLimit ? ONE_SECOND - (now - recentSecond[0]) : 0
     const waitForMinute = !underPerMinuteLimit ? ONE_MINUTE - (now - rateLimitTimestamps[0]) : 0
     const waitForSpacing = spacingSatisfied ? 0 : requiredDelay
-    const waitTime = Math.max(waitForSecond, waitForMinute, waitForSpacing, 50)
+    const waitTime = Math.max(waitForMinute, waitForSpacing, 50)
 
     await sleep(waitTime)
   }
@@ -173,15 +161,6 @@ const normalizeString = (value: string | null | undefined) => {
   if (!value) return null
   const trimmed = value.trim()
   return trimmed.length ? trimmed : null
-}
-
-const toYear = (dateLike: string | null | undefined) => {
-  if (!dateLike) return null
-  const date = new Date(dateLike)
-  if (Number.isNaN(date.getTime())) {
-    return null
-  }
-  return date.getUTCFullYear()
 }
 
 const uniqueStrings = (values: Array<string | null | undefined>) => {
@@ -220,80 +199,58 @@ const formatAuthorName = (name: string | null | undefined) => {
   return formatted.length ? formatted : normalized
 }
 
-const isNsfw = (manga: z.infer<typeof MangaSchema>) => {
-  const explicitGenreNames = uniqueStrings(manga.explicit_genres?.map((item) => item.name) ?? [])
-  if (explicitGenreNames.length > 0) return true
-  const rating = normalizeString(manga.rating)
-  return rating ? NSFW_RATINGS.has(rating) : false
-}
+const mapMediaToBook = (media: z.infer<typeof MediaSchema>) => {
+  const englishTitle = normalizeString(media.title?.english)
+  const romajiTitle = normalizeString(media.title?.romaji)
+  const nativeTitle = normalizeString(media.title?.native)
+  const title = englishTitle ?? romajiTitle ?? nativeTitle ?? 'Untitled'
 
-const normalizeType = (type: string | null | undefined): string => {
-  const normalized = normalizeString(type)?.toLowerCase()
+  const alternativeTitles = uniqueStrings([englishTitle, romajiTitle, nativeTitle]).filter(
+    (candidate) => candidate !== title
+  )
 
-  if (!normalized) return 'manga'
+  const genreNames = uniqueStrings(media.genres ?? [])
 
-  if (normalized === 'light novel') return 'light_novel'
-  if (normalized === 'novel') return 'novel'
-  if (normalized === 'manhwa') return 'manhwa'
-  if (normalized === 'manhua') return 'manhua'
-
-  // manga, one-shot, doujinshi, etc. -> manga
-  return 'manga'
-}
-
-const mapMangaToBook = (manga: z.infer<typeof MangaSchema>) => {
-  const genreNames = uniqueStrings([
-    ...(manga.genres ?? []).map((item) => item.name),
-    ...(manga.themes ?? []).map((item) => item.name),
-    ...(manga.demographics ?? []).map((item) => item.name),
-  ])
-
-  // const themeNames = uniqueStrings((manga.themes ?? []).map((item) => item.name))
-  // const explicitGenreNames = uniqueStrings((manga.explicit_genres ?? []).map((item) => item.name))
-
-  // const tagNames = uniqueStrings([
-  //   ...explicitGenreNames,
-  //   ...themeNames.filter((name) => !genreNames.includes(name)),
-  // ])
-
-  const englishTitle = normalizeString(manga.title_english)
-  const defaultTitle = normalizeString(manga.title)
-  const fallbackTitles = uniqueStrings((manga.titles ?? []).map((item) => item.title))
-  const title = englishTitle ?? defaultTitle ?? fallbackTitles[0] ?? 'Untitled'
-
-  const alternativeTitles = uniqueStrings([
-    englishTitle,
-    normalizeString(manga.title_japanese),
-    defaultTitle,
-    ...fallbackTitles,
-  ]).filter((candidate) => candidate !== title)
+  const releaseYear = media.startDate?.year ?? null
+  const endYear = media.endDate?.year ?? null
 
   const authorNames = uniqueStrings(
-    (manga.authors ?? [])
-      .map((author) => formatAuthorName(author.name))
+    (media.staff?.edges ?? [])
+      .filter(
+        (edge) =>
+          edge.role &&
+          (edge.role.toLowerCase().includes('story') || edge.role.toLowerCase().includes('art'))
+      )
+      .map((edge) => formatAuthorName(edge.node?.name?.full))
       .filter((value): value is string => value !== null)
   )
+
+  const description = normalizeString(media.description)
+  const cleanDescription = description
+    ? description.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]*>/g, '')
+    : null
 
   return {
     title,
     cover_image:
-      normalizeString(manga.images?.webp?.image_url) ??
-      normalizeString(manga.images?.jpg?.image_url) ??
+      normalizeString(media.coverImage?.extraLarge) ??
+      normalizeString(media.coverImage?.large) ??
+      normalizeString(media.coverImage?.medium) ??
       null,
-    type: normalizeType(manga.type),
+    type: 'manhwa',
     rating: null,
     genres: genreNames,
-    release_year: toYear(manga.published?.from),
-    end_year: toYear(manga.published?.to),
-    description: normalizeString(manga.synopsis),
+    release_year: releaseYear,
+    end_year: endYear,
+    description: cleanDescription,
     description_fr: null,
-    status: STATUS_MAP[normalizeString(manga.status) ?? ''] ?? 'ongoing',
-    volumes: manga.volumes ?? null,
-    chapters: manga.chapters ?? null,
+    status: STATUS_MAP[normalizeString(media.status) ?? ''] ?? 'ongoing',
+    volumes: media.volumes ?? null,
+    chapters: media.chapters ?? null,
     alternative_titles: alternativeTitles,
-    data_source: 'myanimelist',
-    external_id: manga.mal_id,
-    nsfw: isNsfw(manga),
+    data_source: 'anilist',
+    external_id: media.id,
+    nsfw: media.isAdult ?? false,
     rating_count: 0,
     authors: authorNames,
   }
@@ -306,13 +263,12 @@ const prepareArrayParam = (values: string[] | null | undefined) => {
   return JSON.stringify(values)
 }
 
-const buildInsertParameters = (book: ReturnType<typeof mapMangaToBook>) => [
+const buildInsertParameters = (book: ReturnType<typeof mapMediaToBook>) => [
   book.title,
   book.cover_image,
   book.type,
   book.rating,
   prepareArrayParam(book.genres),
-  // prepareArrayParam(book.tags),
   book.release_year,
   book.end_year,
   book.description,
@@ -327,13 +283,12 @@ const buildInsertParameters = (book: ReturnType<typeof mapMangaToBook>) => [
   book.rating_count,
 ]
 
-const buildUpdateParameters = (book: ReturnType<typeof mapMangaToBook>) => [
+const buildUpdateParameters = (book: ReturnType<typeof mapMediaToBook>) => [
   book.title,
   book.cover_image,
   book.type,
   book.rating,
   prepareArrayParam(book.genres),
-  // prepareArrayParam(book.tags),
   book.release_year,
   book.end_year,
   book.description,
@@ -406,7 +361,7 @@ type UpsertResult =
 
 const upsertBook = async (
   client: import('pg').PoolClient,
-  book: ReturnType<typeof mapMangaToBook>
+  book: ReturnType<typeof mapMediaToBook>
 ): Promise<UpsertResult> => {
   const updateParams = buildUpdateParameters(book)
   const updateResult = await client.query(updateStatement, updateParams)
@@ -508,7 +463,70 @@ const syncAuthorsWithRetry = async (
   }
 }
 
-const fetchMangaPage = async (page: number) => {
+const MANHWA_QUERY = `
+  query ($page: Int, $perPage: Int) {
+    Page(page: $page, perPage: $perPage) {
+      pageInfo {
+        currentPage
+        hasNextPage
+        perPage
+      }
+      media(
+        type: MANGA
+        countryOfOrigin: "KR"
+        sort: ID
+      ) {
+        id
+        idMal
+        title {
+          romaji
+          english
+          native
+        }
+        description
+        coverImage {
+          extraLarge
+          large
+          medium
+        }
+        format
+        status
+        chapters
+        volumes
+        averageScore
+        genres
+        tags {
+          name
+          isMediaSpoiler
+        }
+        startDate {
+          year
+          month
+          day
+        }
+        endDate {
+          year
+          month
+          day
+        }
+        countryOfOrigin
+        isAdult
+        staff(perPage: 25) {
+          edges {
+            role
+            node {
+              name {
+                full
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`
+
+const fetchManhwaPage = async (page: number) => {
   try {
     await waitForRateLimit()
     let attempt = 0
@@ -516,20 +534,43 @@ const fetchMangaPage = async (page: number) => {
 
     while (attempt < MAX_FETCH_RETRIES) {
       try {
-        const response = await axios.get(MANGA_API_URL, {
-          params: { page, order_by: 'mal_id', sort: 'asc' },
-          headers: { 'User-Agent': 'Trackr Data Importer/1.0 (https://docs.api.jikan.moe/)' },
-        })
+        const response = await axios.post(
+          GRAPHQL_API_URL,
+          {
+            query: MANHWA_QUERY,
+            variables: {
+              page,
+              perPage: PER_PAGE,
+            },
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'User-Agent': 'Trackr Data Importer/1.0',
+            },
+          }
+        )
+
+        if (response.data.errors) {
+          throw new Error(`GraphQL errors: ${JSON.stringify(response.data.errors)}`)
+        }
+
         return ApiResponseSchema.parse(response.data)
       } catch (error) {
         attempt += 1
         lastError = error
+
         if (
           axios.isAxiosError(error) &&
           error.response?.status === 429 &&
           attempt < MAX_FETCH_RETRIES
         ) {
-          const backoff = Math.min(REQUEST_DELAY_MS * Math.pow(2, attempt), ONE_MINUTE)
+          const retryAfter = error.response.headers['retry-after']
+          const backoff = retryAfter
+            ? Number(retryAfter) * ONE_SECOND
+            : Math.min(REQUEST_DELAY_MS * Math.pow(2, attempt), ONE_MINUTE)
+
           console.warn(
             `Rate limit hit fetching page ${page}. Retrying in ${backoff}ms (attempt ${attempt}/${MAX_FETCH_RETRIES}).`
           )
@@ -577,14 +618,15 @@ const runImport = async (logger: BaseCommand['logger']) => {
       }
 
       logger.info(`Fetching page ${page}...`)
-      const { data: mangaList, pagination } = await fetchMangaPage(page)
+      const response = await fetchManhwaPage(page)
+      const { media: manhwaList, pageInfo } = response.data.Page
 
-      for (const manga of mangaList) {
-        const book = mapMangaToBook(manga)
+      for (const manhwa of manhwaList) {
+        const book = mapMediaToBook(manhwa)
 
         if (!book.status || !['completed', 'ongoing', 'hiatus'].includes(book.status)) {
           logger.info(
-            `Skipping MAL ${manga.mal_id}: status "${manga.status}" could not be normalized.`
+            `Skipping AniList ${manhwa.id}: status "${manhwa.status}" could not be normalized.`
           )
           totalSkipped += 1
           continue
@@ -602,7 +644,7 @@ const runImport = async (logger: BaseCommand['logger']) => {
             totalDuplicateTitle += 1
           }
         } catch (error: any) {
-          logger.error(`Failed to upsert MAL ${manga.mal_id}: ${error.message ?? error}`)
+          logger.error(`Failed to upsert AniList ${manhwa.id}: ${error.message ?? error}`)
           totalSkipped += 1
         }
       }
@@ -612,7 +654,7 @@ const runImport = async (logger: BaseCommand['logger']) => {
         `Page ${page} processed. totals — inserted: ${totalInserted}, updated: ${totalUpdated}, duplicates: ${totalDuplicateTitle}, skipped: ${totalSkipped}`
       )
 
-      if (!pagination.has_next_page) {
+      if (!pageInfo.hasNextPage) {
         logger.info('No more pages available from API. Done.')
         break
       }
@@ -633,14 +675,14 @@ const runImport = async (logger: BaseCommand['logger']) => {
   }
 }
 
-export default class ImportMyanimelist extends BaseCommand {
-  static commandName = 'import:myanimelist'
-  static description = 'Import all MyAnimeList manga entries into Trackr database'
+export default class ImportAnilist extends BaseCommand {
+  static commandName = 'import:anilist'
+  static description = 'Import all AniList Korean manhwa entries into Trackr database'
 
   static options: CommandOptions = {}
 
   async run() {
-    this.logger.info('Importing MyAnimeList manga entries into Trackr database...')
+    this.logger.info('Importing AniList Korean manhwa entries into Trackr database...')
     try {
       await runImport(this.logger)
     } catch (error: unknown) {

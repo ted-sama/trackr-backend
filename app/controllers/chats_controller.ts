@@ -134,8 +134,9 @@ export default class ChatsController {
       return response.notFound({ message: 'Book tracking not found' })
     }
 
-    // Charger les auteurs du livre
+    // Charger les auteurs et publishers du livre
     await book.load('authors')
+    await book.load('publishers')
     const authorNames = book.authors.map((author) => author.name).join(', ')
 
     const { messages } = request.body() as { messages: UIMessage[] }

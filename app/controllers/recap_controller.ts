@@ -18,7 +18,7 @@ export default class RecapController {
       const { id: bookId, chapterId } = params
 
       // Verify book exists
-      const book = await Book.query().where('id', bookId).preload('authors').first()
+      const book = await Book.query().where('id', bookId).preload('authors').preload('publishers').first()
       if (!book) {
         return response.notFound({ message: 'Book not found' })
       }

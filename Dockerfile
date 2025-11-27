@@ -35,14 +35,34 @@ RUN pnpm run build
 ###############################################
 FROM base AS prod-deps
 
+# Install build dependencies for native modules
+RUN apk add --no-cache python3 make g++
+
 ENV NODE_ENV=production
 COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --prod --ignore-scripts
+RUN pnpm install --frozen-lockfile --prod
+
+# Rebuild native modules for the container architecture
+RUN pnpm rebuild better-sqlite3
 
 ###############################################
 # Final runtime image
 ###############################################
 FROM base AS runner
+
+# Install runtime dependencies for better-sqlite3 and chromium for puppeteer
+RUN apk add --no-cache \
+    libstdc++ \
+    chromium \
+    nss \
+    freetype \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont
+
+# Tell Puppeteer to use the installed Chromium
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
 
 WORKDIR /usr/src/app
 ENV NODE_ENV=production

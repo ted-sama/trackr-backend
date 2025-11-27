@@ -18,7 +18,7 @@ export default class CategoriesController {
 
     const categories = await Category.query()
       .preload('books', (booksQuery) => {
-        booksQuery.preload('authors')
+        booksQuery.preload('authors').preload('publishers')
       })
       .paginate(page, limit)
     return response.ok(categories)
@@ -36,7 +36,7 @@ export default class CategoriesController {
     const category = await Category.query()
       .where('id', params.id)
       .preload('books', (booksQuery) => {
-        booksQuery.preload('authors')
+        booksQuery.preload('authors').preload('publishers')
       })
       .first()
 

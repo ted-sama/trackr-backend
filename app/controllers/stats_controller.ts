@@ -282,7 +282,9 @@ export default class StatsController {
     const progress = await BookTracking.query()
       .where('user_id', userId)
       .where('status', 'reading')
-      .preload('book')
+      .preload('book', (bookQuery) => {
+        bookQuery.preload('authors').preload('publishers')
+      })
       .orderBy('updated_at', 'desc')
       .limit(20)
 

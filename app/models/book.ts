@@ -5,6 +5,7 @@ import Category from '#models/category'
 import List from '#models/list'
 import BookTracking from '#models/book_tracking'
 import Author from '#models/author'
+import Publisher from '#models/publisher'
 
 const parseStringArray = (value: unknown): string[] | null => {
   if (Array.isArray(value)) {
@@ -130,4 +131,9 @@ export default class Book extends BaseModel {
     pivotRelatedForeignKey: 'author_id',
   })
   declare authors: ManyToMany<typeof Author>
+
+  @manyToMany(() => Publisher, {
+    pivotTable: 'book_publishers',
+  })
+  declare publishers: ManyToMany<typeof Publisher>
 }

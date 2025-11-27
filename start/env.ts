@@ -46,6 +46,9 @@ export default await Env.create(new URL('../', import.meta.url), {
   // OpenRouter
   OPENROUTER_API_KEY: Env.schema.string(),
 
+  // Comic Vine API (for fetching comic covers)
+  COMICVINE_API_KEY: Env.schema.string.optional(),
+
   /*
   |----------------------------------------------------------
   | Variables for configuring the drive package

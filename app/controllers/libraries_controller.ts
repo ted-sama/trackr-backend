@@ -32,7 +32,7 @@ export default class LibraryController {
       .related('bookTrackings')
       .query()
       .preload('book', (bookQuery) => {
-        bookQuery.preload('authors')
+        bookQuery.preload('authors').preload('publishers')
       })
       .paginate(page, limit)
 
@@ -62,7 +62,7 @@ export default class LibraryController {
       .related('bookTrackings')
       .query()
       .preload('book', (bookQuery) => {
-        bookQuery.preload('authors')
+        bookQuery.preload('authors').preload('publishers')
       })
       .paginate(page, limit)
 
@@ -249,7 +249,7 @@ export default class LibraryController {
       .where('book_id', book.id)
       .where('user_id', user.id)
       .preload('book', (bookQuery) => {
-        bookQuery.preload('authors')
+        bookQuery.preload('authors').preload('publishers')
       })
       .first()
 

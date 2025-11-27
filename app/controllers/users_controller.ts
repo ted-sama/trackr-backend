@@ -129,6 +129,7 @@ export default class UsersController {
       .query()
       .orderBy('users_top_books.position', 'asc')
       .preload('authors')
+      .preload('publishers')
 
     return response.ok(topBooks)
   }
@@ -183,7 +184,7 @@ export default class UsersController {
     const paginated = await queryBuilder
       .preload('user')
       .preload('bookItems', (bookItemsQuery) => {
-        bookItemsQuery.preload('authors')
+        bookItemsQuery.preload('authors').preload('publishers')
       })
       .preload('likedBy')
       .preload('savedBy')
@@ -362,7 +363,7 @@ export default class UsersController {
     const paginated = await queryBuilder
       .preload('user')
       .preload('bookItems', (bookItemsQuery) => {
-        bookItemsQuery.preload('authors')
+        bookItemsQuery.preload('authors').preload('publishers')
       })
       .preload('likedBy')
       .preload('savedBy')
@@ -392,6 +393,7 @@ export default class UsersController {
       .query()
       .orderBy('users_top_books.position', 'asc')
       .preload('authors')
+      .preload('publishers')
     return response.ok(topBooks)
   }
 
