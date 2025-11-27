@@ -133,6 +133,14 @@ export default class List extends BaseModel {
     return this.likedBy.length
   }
 
+  @computed()
+  get savesCount() {
+    if (!this.$preloaded.savedBy) {
+      return 0
+    }
+    return this.savedBy.length
+  }
+
   public isLikedBy(userId: string): boolean {
     if (!this.$preloaded.likedBy) {
       return false
