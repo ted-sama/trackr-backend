@@ -137,6 +137,28 @@ export default class ImportGcd extends BaseCommand {
         AND s.year_began >= 1980
         AND s.issue_count > 1
         AND s.publisher_id IN (${this.allowedPublishers.join(',')})
+        -- Exclude compilations/reprints
+        AND s.name NOT LIKE '%Masterwork%'
+        AND s.name NOT LIKE '%Essential%'
+        AND s.name NOT LIKE '%Omnibus%'
+        AND s.name NOT LIKE '%Epic Collection%'
+        AND s.name NOT LIKE '%Showcase Presents%'
+        AND s.name NOT LIKE '%Archives%'
+        AND s.name NOT LIKE '%Ultimate Collection%'
+        AND s.name NOT LIKE '%Platinum%'
+        -- Exclude magazines/digests
+        AND s.name NOT LIKE '%Magazine%'
+        AND s.name NOT LIKE '%Digest%'
+        -- Exclude movie adaptations
+        AND s.name NOT LIKE '%Movie%'
+        AND s.name NOT LIKE '%Adaptation%'
+        AND s.name NOT LIKE '%Motion Picture%'
+        AND s.name NOT LIKE '%Official Comic%'
+        -- Exclude licensed/kids content
+        AND s.name NOT LIKE 'Disney%'
+        AND s.name NOT LIKE '%ALF%'
+        AND s.name NOT LIKE 'Dennis the Menace%'
+        AND s.name NOT LIKE 'Star Trek%'
       ORDER BY s.id
       ${limit ? `LIMIT ${limit}` : ''}
     `

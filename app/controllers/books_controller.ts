@@ -181,7 +181,7 @@ export default class BooksController {
     return response.ok(searchResults)
   }
 
-  async getBySameAuthor({ params, request, response }: HttpContext) {
+  async getBySame({ params, request, response }: HttpContext) {
     const nsfw =
       request.input('nsfw', 'false') === 'true' || request.input('nsfw', 'false') === true
 
@@ -194,32 +194,63 @@ export default class BooksController {
     }
 
     await book.load('authors')
+    await book.load('publishers')
+
     const authorIds = book.authors.map((author) => author.id)
+    const publisherIds = book.publishers.map((publisher) => publisher.id)
 
-    if (authorIds.length === 0) {
-      return response.ok([])
+    // Cas 1: Le livre a des auteurs -> recherche par auteur
+    if (authorIds.length > 0) {
+      const booksQuery = Book.query().whereNot('id', book.id)
+
+      // Si nsfw=false, on masque le contenu NSFW
+      // Si nsfw=true, on affiche tout (pas de filtre)
+      if (!nsfw) {
+        booksQuery.where('nsfw', false)
+      }
+
+      const books = await booksQuery
+        .whereExists((existsQuery) => {
+          existsQuery
+            .from('author_books as ab')
+            .whereRaw('ab.book_id = books.id')
+            .whereIn('ab.author_id', authorIds)
+        })
+        .preload('authors')
+        .preload('publishers')
+        .orderBy('rating', 'desc')
+        .limit(5)
+
+      return response.ok(books)
     }
 
-    const booksQuery = Book.query().whereNot('id', book.id)
+    // Cas 2: Le livre n'a pas d'auteur (comics) -> recherche par publisher et année
+    if (publisherIds.length > 0 && book.releaseYear) {
+      const booksQuery = Book.query().whereNot('id', book.id)
 
-    // Si nsfw=false, on masque le contenu NSFW
-    // Si nsfw=true, on affiche tout (pas de filtre)
-    if (!nsfw) {
-      booksQuery.where('nsfw', false)
+      // Si nsfw=false, on masque le contenu NSFW
+      // Si nsfw=true, on affiche tout (pas de filtre)
+      if (!nsfw) {
+        booksQuery.where('nsfw', false)
+      }
+
+      const books = await booksQuery
+        .whereExists((existsQuery) => {
+          existsQuery
+            .from('book_publishers as bp')
+            .whereRaw('bp.book_id = books.id')
+            .whereIn('bp.publisher_id', publisherIds)
+        })
+        .where('release_year', book.releaseYear)
+        .preload('authors')
+        .preload('publishers')
+        .orderBy('rating', 'desc')
+        .limit(5)
+
+      return response.ok(books)
     }
 
-    const books = await booksQuery
-      .whereExists((existsQuery) => {
-        existsQuery
-          .from('author_books as ab')
-          .whereRaw('ab.book_id = books.id')
-          .whereIn('ab.author_id', authorIds)
-      })
-      .preload('authors')
-      .preload('publishers')
-      .orderBy('rating', 'desc')
-      .limit(5)
-
-    return response.ok(books)
+    // Aucune donnée suffisante pour faire une recherche
+    return response.ok([])
   }
 }
