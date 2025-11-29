@@ -56,15 +56,6 @@ export default class BooksController {
       }
       case 'most_tracked': {
         query
-          .select(
-            db.raw(
-              `COALESCE((
-                SELECT COUNT(*)::int
-                FROM book_tracking bt
-                WHERE bt.book_id = books.id
-              ), 0) AS tracking_count`
-            )
-          )
           .orderBy('tracking_count', 'desc')
           .orderBy('rating_count', 'desc')
           .orderBy('rating', 'desc')

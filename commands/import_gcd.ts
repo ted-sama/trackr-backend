@@ -1,4 +1,4 @@
-import { BaseCommand, args, flags } from '@adonisjs/core/ace'
+import { BaseCommand, flags } from '@adonisjs/core/ace'
 import type { CommandOptions } from '@adonisjs/core/types/ace'
 import Database from 'better-sqlite3'
 import db from '@adonisjs/lucid/services/db'
@@ -18,8 +18,8 @@ export default class ImportGcd extends BaseCommand {
     startApp: true,
   }
 
-  @args.string({ description: 'Limit number of comics to import (for testing)' })
-  declare limit?: string
+  @flags.number({ description: 'Limit number of comics to import (for testing)' })
+  declare limit?: number
 
   @flags.boolean({ description: 'Scrape cover images from GCD website after import' })
   declare scrapeCovers: boolean
@@ -39,7 +39,7 @@ export default class ImportGcd extends BaseCommand {
   private scrapeDelay = 3000 // 3 seconds between requests
 
   async run() {
-    const limitNumber = this.limit ? Number.parseInt(this.limit) : undefined
+    const limitNumber = this.limit
     this.scrapeDelay = this.delay || 3000
 
     // If covers-only mode, skip import and just scrape covers
@@ -411,12 +411,15 @@ export default class ImportGcd extends BaseCommand {
       await this.sleep(2000)
 
       // Try to find cover image on the series page
-      // GCD typically shows covers in the issue list or as a series thumbnail
+      // GCD shows covers in a flex grid - we want the first one
       const coverUrl = await page
-        .$eval('img[src*="/covers/"], img.cover_img, .cover img', (img) => img.getAttribute('src'))
+        .$$eval('img[src*="/covers/"], img.cover_img, .cover img', (imgs) => {
+          const first = imgs[0]
+          return first ? first.getAttribute('src') : null
+        })
         .catch(() => null)
 
-      // If no direct cover, try finding any cover-like image
+      // If no direct cover, try finding any cover-like image (first match)
       const fallbackCoverUrl =
         coverUrl ||
         (await page
@@ -455,9 +458,10 @@ export default class ImportGcd extends BaseCommand {
           await this.sleep(1500)
 
           const issueCoverUrl = await page
-            .$eval('img[src*="/covers/"], img.cover_img, .cover img', (img) =>
-              img.getAttribute('src')
-            )
+            .$$eval('img[src*="/covers/"], img.cover_img, .cover img', (imgs) => {
+              const first = imgs[0]
+              return first ? first.getAttribute('src') : null
+            })
             .catch(() => null)
 
           return issueCoverUrl

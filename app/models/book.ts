@@ -105,6 +105,9 @@ export default class Book extends BaseModel {
   @column()
   declare ratingCount: number
 
+  @column()
+  declare trackingCount: number
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
