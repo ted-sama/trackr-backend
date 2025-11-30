@@ -15,7 +15,7 @@ services:
       - "3333:3333"
     volumes:
       - ./public:/usr/src/app/public:ro
-      - /Users/ted/dev/trackr/comics-dump:/comics-dump:ro
+      - ./data/gcd:/tmp/gcd-data
     command: ["sh", "-c", "node build/ace.js migration:run --force && node build/bin/server.js"]
 
   db:

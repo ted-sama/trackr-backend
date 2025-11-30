@@ -14,11 +14,14 @@ Script pour importer les comics depuis la base de données GCD dans Trackr.
 ### Option A : Via SCP (recommandé)
 
 ```bash
-# Depuis ton Mac
-scp ~/Downloads/gcd-sqlite-*.gz user@ton-vps:/tmp/gcd-data/
+# Créer le dossier sur le VPS (dans le projet)
+mkdir -p data/gcd
 
-# Sur le VPS
-cd /tmp/gcd-data
+# Depuis ton Mac, envoyer sur le VPS
+scp ~/Downloads/gcd-sqlite-*.gz user@vps:/chemin/vers/trackr-backend/data/gcd/
+
+# Sur le VPS, décompresser
+cd /chemin/vers/trackr-backend/data/gcd
 gunzip gcd-sqlite-*.gz
 mv gcd-sqlite-* gcd.db
 ```
@@ -33,7 +36,19 @@ node ace import:gcd --db-url="https://example.com/gcd.db.gz"
 
 ## Exécution
 
-### Import basique
+### Via Docker (production)
+
+```bash
+# Import basique
+docker compose exec app node build/ace.js import:gcd
+
+# Avec options
+docker compose exec app node build/ace.js import:gcd --limit=100
+docker compose exec app node build/ace.js import:gcd --scrape-covers
+docker compose exec app node build/ace.js fix:duplicate-comics
+```
+
+### En local (développement)
 
 ```bash
 # Utilise le chemin par défaut /tmp/gcd-data/gcd.db
