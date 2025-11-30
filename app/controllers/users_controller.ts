@@ -264,6 +264,19 @@ export default class UsersController {
       })
     }
 
+    // Check if user is trying to upload a GIF without Plus subscription
+    const isGif = avatar.extname?.toLowerCase() === 'gif'
+    if (isGif && user.plan !== 'plus') {
+      throw new AppError('GIF avatars are only available for Trackr Plus subscribers', {
+        status: 403,
+        code: 'USER_AVATAR_GIF_PLUS_REQUIRED',
+        // meta: {
+        //   requiredPlan: 'plus',
+        //   currentPlan: user.plan,
+        // },
+      })
+    }
+
     const key = `images/user/avatar/${cuid()}.${avatar.extname}`
     await avatar.moveToDisk(key)
 
@@ -280,6 +293,19 @@ export default class UsersController {
 
   async uploadBackdropImage({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
+
+    // Check if user has Plus subscription for backdrop images
+    if (user.plan !== 'plus') {
+      throw new AppError('Image backdrops are only available for Trackr Plus subscribers', {
+        status: 403,
+        code: 'USER_BACKDROP_PLUS_REQUIRED',
+        // meta: {
+        //   requiredPlan: 'plus',
+        //   currentPlan: user.plan,
+        // },
+      })
+    }
+
     const { backdrop } = await request.validateUsing(updateBackdropSchema)
 
     if (!backdrop) {

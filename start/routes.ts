@@ -17,6 +17,7 @@ const LibraryController = () => import('#controllers/libraries_controller')
 const RecapController = () => import('#controllers/recap_controller')
 const ChatsController = () => import('#controllers/chats_controller')
 const StatsController = () => import('#controllers/stats_controller')
+const SubscriptionsController = () => import('#controllers/subscriptions_controller')
 
 import AutoSwagger from 'adonis-autoswagger'
 import swagger from '#config/swagger'
@@ -57,6 +58,7 @@ router
     router.put('/top/reorder', [UsersController, 'reorderTopBooks'])
     router.get('/activity', [UsersController, 'showMyActivity'])
     router.get('/stats', [StatsController, 'index'])
+    router.get('/subscription', [SubscriptionsController, 'show'])
   })
   .prefix('me')
 
@@ -114,3 +116,10 @@ router
     router.post('/:bookId', [ChatsController, 'stream'])
   })
   .prefix('chat')
+
+// Webhooks (no auth required - verified via webhook secret)
+router
+  .group(() => {
+    router.post('/revenuecat', [SubscriptionsController, 'webhook'])
+  })
+  .prefix('webhooks')

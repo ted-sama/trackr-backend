@@ -9,6 +9,8 @@ import {
 } from 'ai'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import Book from '#models/book'
+import SubscriptionsController, { CHAT_LIMITS } from '#controllers/subscriptions_controller'
+import AppError from '#exceptions/app_error'
 
 const openrouter = createOpenRouter({
   apiKey: env.get('OPENROUTER_API_KEY'),
@@ -125,6 +127,23 @@ export default class ChatsController {
     if (!user) {
       return response.unauthorized({ message: 'Unauthorized' })
     }
+
+    // Check chat request limit
+    const canChat = await SubscriptionsController.canMakeChatRequest(user)
+    if (!canChat) {
+      const limit = user.plan === 'plus' ? CHAT_LIMITS.PLUS : CHAT_LIMITS.FREE
+      throw new AppError(`You have reached your monthly chat limit of ${limit} messages`, {
+        status: 429,
+        code: 'CHAT_LIMIT_REACHED',
+        // meta: {
+        //   limit,
+        //   used: user.chatRequestsCount,
+        //   resetsAt: user.chatRequestsResetAt,
+        //   isPremium: user.plan === 'plus',
+        // },
+      })
+    }
+
     const bookTracking = await book
       .related('bookTrackings')
       .query()
@@ -248,6 +267,9 @@ NE FAIS PAS de recherche sur d'autres livres sauf si l'utilisateur mentionne exp
       messages: sanitizeForOpenRouter(enrichedMessages),
       system: systemPrompt,
     })
+
+    // Increment chat request counter
+    await SubscriptionsController.incrementChatRequest(user)
 
     // Masquer le raisonnement de Perplexity
     return result.pipeUIMessageStreamToResponse(response.response, {

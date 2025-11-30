@@ -2,16 +2,29 @@ import type { HttpContext } from '@adonisjs/core/http'
 import db from '@adonisjs/lucid/services/db'
 import BookTracking from '#models/book_tracking'
 import User from '#models/user'
+import AppError from '#exceptions/app_error'
 // import ActivityLog from '#models/activity_log'
 // import Book from '#models/book'
 
 export default class StatsController {
   /**
    * @summary Get user statistics
-   * @description Returns various statistics about the user's reading habits
+   * @description Returns various statistics about the user's reading habits (Plus subscription required)
    */
   async index({ auth, response }: HttpContext) {
     const user = await auth.authenticate()
+
+    // Check if user has Plus subscription
+    if (user.plan !== 'plus') {
+      throw new AppError('Stats are only available for Trackr Plus subscribers', {
+        status: 403,
+        code: 'STATS_PLUS_REQUIRED',
+        // meta: {
+        //   requiredPlan: 'plus',
+        //   currentPlan: user.plan,
+        // },
+      })
+    }
 
     // 1. Overview Stats
     const overview = await this.getOverviewStats(user.id)
@@ -47,12 +60,23 @@ export default class StatsController {
 
   /**
    * @summary Get any user's statistics by username
-   * @description Returns various statistics about a specific user's reading habits
+   * @description Returns various statistics about a specific user's reading habits (target user must have Plus subscription)
    */
   async showUserStats({ params, response }: HttpContext) {
     const user = await User.findBy('username', params.username)
     if (!user) {
       return response.notFound({ message: 'User not found' })
+    }
+
+    // Check if target user has Plus subscription (stats are a Plus feature)
+    if (user.plan !== 'plus') {
+      throw new AppError('This user does not have a Trackr Plus subscription', {
+        status: 403,
+        code: 'STATS_PLUS_REQUIRED',
+        // meta: {
+        //   requiredPlan: 'plus',
+        // },
+      })
     }
 
     // 1. Overview Stats

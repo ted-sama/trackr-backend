@@ -67,6 +67,26 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column()
   declare backdropImage: string | null
 
+  // Subscription fields
+  @column({ serializeAs: null })
+  declare subscriptionId: string | null
+
+  @column()
+  declare subscriptionStatus: 'active' | 'cancelled' | 'expired' | 'billing_issue' | null
+
+  @column.dateTime()
+  declare subscriptionExpiresAt: DateTime | null
+
+  @column()
+  declare subscriptionPeriod: 'monthly' | 'yearly' | null
+
+  // Chat request limits
+  @column({ serializeAs: null })
+  declare chatRequestsCount: number
+
+  @column.dateTime({ serializeAs: null })
+  declare chatRequestsResetAt: DateTime | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
@@ -90,4 +110,19 @@ export default class User extends compose(BaseModel, AuthFinder) {
     expiresIn: '30 days',
     prefix: 'trk_',
   })
+
+  /**
+   * Check if user has an active Plus subscription
+   */
+  get isPremium(): boolean {
+    if (this.plan !== 'plus') return false
+
+    // If there's an expiration date, check if still valid
+    if (this.subscriptionExpiresAt) {
+      return DateTime.now() < this.subscriptionExpiresAt
+    }
+
+    // Admin-granted Plus without expiration
+    return true
+  }
 }

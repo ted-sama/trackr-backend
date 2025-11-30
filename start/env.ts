@@ -49,6 +49,11 @@ export default await Env.create(new URL('../', import.meta.url), {
   // Comic Vine API (for fetching comic covers)
   COMICVINE_API_KEY: Env.schema.string.optional(),
 
+  // RevenueCat (Subscription Management)
+  REVENUECAT_WEBHOOK_SECRET: Env.schema.string.optional(),
+  REVENUECAT_PRODUCT_MONTHLY: Env.schema.string.optional(),
+  REVENUECAT_PRODUCT_YEARLY: Env.schema.string.optional(),
+
   /*
   |----------------------------------------------------------
   | Variables for configuring the drive package
