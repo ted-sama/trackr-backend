@@ -101,18 +101,47 @@ export default class BooksController {
     return response.ok(book)
   }
 
+  /**
+   * @summary Search books
+   * @tag Books
+   * @description Search books by title, alternative titles, or author name
+   * @paramQuery q - Search query - @type(string) @required
+   * @paramQuery page - Page number for pagination - @type(number)
+   * @paramQuery limit - Number of items per page (max 100) - @type(number)
+   * @paramQuery nsfw - Include NSFW content - @type(boolean)
+   * @paramQuery types - Filter by book types (comma-separated or array) - @type(string)
+   * @responseBody 200 - <Book[]>.paginated() - Search results with pagination
+   * @responseBody 400 - Bad request
+   */
   async search({ request, response }: HttpContext) {
     const page = request.input('page', 1)
     const limit = request.input('limit', 20)
     const query = request.input('q')
     const nsfw =
       request.input('nsfw', 'false') === 'true' || request.input('nsfw', 'false') === true
+    const typesInput = request.input('types')
 
     if (!query) {
       throw new AppError('Search query is required', {
         status: 400,
         code: 'BOOK_SEARCH_QUERY_REQUIRED',
       })
+    }
+
+    // Parse types filter: can be a comma-separated string or an array
+    let types: string[] | null = null
+    if (typesInput) {
+      if (Array.isArray(typesInput)) {
+        types = typesInput.filter((t: unknown) => typeof t === 'string' && t.trim().length > 0)
+      } else if (typeof typesInput === 'string') {
+        types = typesInput
+          .split(',')
+          .map((t) => t.trim())
+          .filter((t) => t.length > 0)
+      }
+      if (types && types.length === 0) {
+        types = null
+      }
     }
 
     const normalizedQuery = query.trim().toLowerCase()
@@ -123,6 +152,11 @@ export default class BooksController {
     // Si nsfw=true, on affiche tout (pas de filtre)
     if (!nsfw) {
       bookQuery.where('nsfw', false)
+    }
+
+    // Filter by types if provided
+    if (types && types.length > 0) {
+      bookQuery.whereIn('type', types)
     }
 
     const searchResults = await bookQuery

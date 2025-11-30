@@ -5,6 +5,10 @@ import db from '@adonisjs/lucid/services/db'
 import puppeteerExtra from 'puppeteer-extra'
 import StealthPlugin from 'puppeteer-extra-plugin-stealth'
 import type { Browser, Page } from 'puppeteer'
+import { createWriteStream, existsSync, mkdirSync, unlinkSync, createReadStream } from 'node:fs'
+import { pipeline } from 'node:stream/promises'
+import { createGunzip } from 'node:zlib'
+import { join } from 'node:path'
 
 // Enable stealth plugin to bypass Cloudflare
 const puppeteer = puppeteerExtra.default ?? puppeteerExtra
@@ -33,8 +37,14 @@ export default class ImportGcd extends BaseCommand {
   @flags.number({ description: 'Skip first N books when scraping covers (for resuming)' })
   declare skip: number
 
+  @flags.string({
+    description: 'URL to download GCD database from (direct link to .gz or .db file)',
+  })
+  declare dbUrl: string
+
   private allowedPublishers = [54, 78, 709, 512, 1977, 2547, 865, 370, 17792, 674]
-  private gcdDbPath = process.env.GCD_DB_PATH || '/comics-dump/gcd.db'
+  private gcdDbPath = process.env.GCD_DB_PATH || '/tmp/gcd-data/gcd.db'
+  private gcdDownloadDir = process.env.GCD_DOWNLOAD_DIR || '/tmp/gcd-data'
   private browser: Browser | null = null
   private scrapeDelay = 3000 // 3 seconds between requests
 
@@ -49,6 +59,21 @@ export default class ImportGcd extends BaseCommand {
       return
     }
 
+    // Download database from URL if provided
+    if (this.dbUrl) {
+      await this.downloadFromUrl(this.dbUrl)
+    }
+
+    // Check if database exists
+    if (!existsSync(this.gcdDbPath)) {
+      this.logger.error(`GCD database not found at ${this.gcdDbPath}`)
+      this.logger.info('Options:')
+      this.logger.info('  1. Transfer the DB via SCP: scp gcd.db user@vps:/tmp/gcd-data/')
+      this.logger.info('  2. Use --db-url to download from a direct URL')
+      this.logger.info('  3. Set GCD_DB_PATH env var to point to an existing DB')
+      return
+    }
+
     if (limitNumber) {
       this.logger.info(`Starting GCD import (limited to ${limitNumber} comics)...`)
     } else {
@@ -60,6 +85,9 @@ export default class ImportGcd extends BaseCommand {
     try {
       await this.importPublishers(gcdDb)
       await this.importComics(gcdDb, limitNumber)
+
+      // Dédupliquer les noms de comics (ajouter l'année si plusieurs ont le même nom)
+      await this.deduplicateComicNames()
 
       this.logger.success('GCD import completed successfully!')
 
@@ -191,16 +219,18 @@ export default class ImportGcd extends BaseCommand {
           continue
         }
 
+        // Si le comic est en cours (is_current ou pas de year_ended), chapters = null
+        const isOngoing = comic.is_current || !comic.year_ended
         const [insertResult] = await db
           .table('books')
           .insert({
             title: comic.name,
             type: 'comic',
             release_year: comic.year_began,
-            end_year: comic.is_current ? null : comic.year_ended,
+            end_year: isOngoing ? null : comic.year_ended,
             description: null,
-            status: comic.is_current ? 'ongoing' : 'completed',
-            chapters: comic.issue_count,
+            status: isOngoing ? 'ongoing' : 'completed',
+            chapters: isOngoing ? null : comic.issue_count,
             data_source: 'gcd',
             external_id: comic.id,
             nsfw: false,
@@ -479,5 +509,124 @@ export default class ImportGcd extends BaseCommand {
 
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms))
+  }
+
+  /**
+   * Download the GCD SQLite database from a direct URL
+   * (e.g., from S3, your own server, or any direct download link)
+   */
+  private async downloadFromUrl(url: string) {
+    this.logger.info(`📥 Downloading GCD database from ${url}...`)
+
+    // Create download directory if it doesn't exist
+    if (!existsSync(this.gcdDownloadDir)) {
+      mkdirSync(this.gcdDownloadDir, { recursive: true })
+    }
+
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(`Download failed: ${response.status} ${response.statusText}`)
+    }
+
+    // Determine filename from content-disposition or URL
+    const contentDisposition = response.headers.get('content-disposition')
+    let filename = 'gcd.db'
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+      if (match) {
+        filename = match[1].replace(/['"]/g, '')
+      }
+    } else if (url.includes('.')) {
+      filename = url.split('/').pop()?.split('?')[0] || filename
+    }
+
+    const downloadPath = join(this.gcdDownloadDir, filename)
+    const fileStream = createWriteStream(downloadPath)
+
+    // @ts-ignore - response.body is a ReadableStream
+    await pipeline(response.body, fileStream)
+
+    this.logger.success(`Downloaded to ${downloadPath}`)
+
+    // Decompress if needed
+    if (filename.endsWith('.gz')) {
+      this.logger.info('Decompressing database...')
+      const decompressedPath = downloadPath.replace('.gz', '')
+
+      await pipeline(
+        createReadStream(downloadPath),
+        createGunzip(),
+        createWriteStream(decompressedPath)
+      )
+
+      this.gcdDbPath = decompressedPath
+
+      // Clean up compressed file
+      unlinkSync(downloadPath)
+      this.logger.success(`Decompressed to ${this.gcdDbPath}`)
+    } else {
+      this.gcdDbPath = downloadPath
+    }
+
+    this.logger.success('GCD database download complete!')
+  }
+
+  /**
+   * Déduplique les noms de comics en ajoutant l'année au titre
+   * pour les comics qui partagent le même nom
+   * Ex: "The Amazing Spider-Man" -> "The Amazing Spider-Man (2022)"
+   */
+  private async deduplicateComicNames() {
+    this.logger.info('Checking for duplicate comic names...')
+
+    // Trouver tous les titres qui apparaissent plus d'une fois
+    const duplicates = await db
+      .from('books')
+      .select('title')
+      .where('type', 'comic')
+      .where('data_source', 'gcd')
+      .groupBy('title')
+      .havingRaw('COUNT(*) > 1')
+
+    if (duplicates.length === 0) {
+      this.logger.info('No duplicate comic names found')
+      return
+    }
+
+    this.logger.info(`Found ${duplicates.length} duplicate titles to fix`)
+
+    let updated = 0
+
+    for (const dup of duplicates) {
+      // Récupérer tous les comics avec ce titre
+      const comics = await db
+        .from('books')
+        .select('id', 'title', 'release_year')
+        .where('type', 'comic')
+        .where('data_source', 'gcd')
+        .where('title', dup.title)
+        .orderBy('release_year', 'asc')
+
+      for (const comic of comics) {
+        if (comic.release_year) {
+          // Ne pas ajouter l'année si elle est déjà dans le titre
+          if (!comic.title.includes(`(${comic.release_year})`)) {
+            const newTitle = `${comic.title} (${comic.release_year})`
+            await db.from('books').where('id', comic.id).update({
+              title: newTitle,
+              updated_at: new Date(),
+            })
+            updated++
+          }
+        }
+      }
+    }
+
+    this.logger.success(`Updated ${updated} comic titles with year disambiguation`)
   }
 }
