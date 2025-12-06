@@ -28,3 +28,9 @@ export const resetPasswordSchema = vine.compile(
     password: vine.string().minLength(8).trim(),
   })
 )
+
+export const googleCallbackSchema = vine.compile(
+  vine.object({
+    idToken: vine.string().trim(),
+  })
+)

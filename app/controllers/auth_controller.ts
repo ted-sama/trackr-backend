@@ -193,4 +193,91 @@ export default class AuthController {
       message: 'Password has been reset successfully',
     })
   }
+
+  /**
+   * @summary Redirect to Google OAuth
+   * @tag Authentication
+   * @description Redirects the user to Google for authentication
+   */
+  async googleRedirect({ ally }: HttpContext) {
+    return ally.use('google').stateless().redirect()
+  }
+
+  /**
+   * @summary Google OAuth callback
+   * @tag Authentication
+   * @description Handles the Google OAuth callback, creates or finds user, returns access token
+   * @responseBody 200 - {"type": "bearer", "token": "string", "expiresAt": "string"} - Authentication token
+   * @responseBody 400 - {"code": "AUTH_GOOGLE_CANCELLED", "message": "Google authentication was cancelled"} - User cancelled
+   * @responseBody 400 - {"code": "AUTH_GOOGLE_DENIED", "message": "Access was denied"} - Access denied
+   * @responseBody 400 - {"code": "AUTH_GOOGLE_FAILED", "message": "Google authentication failed"} - Authentication failed
+   */
+  async googleCallback({ ally, response }: HttpContext) {
+    const google = ally.use('google').stateless()
+
+    if (google.accessDenied()) {
+      throw new AppError('Access was denied', {
+        status: 400,
+        code: 'AUTH_GOOGLE_DENIED',
+      })
+    }
+
+    if (google.hasError()) {
+      throw new AppError('Google authentication failed', {
+        status: 400,
+        code: 'AUTH_GOOGLE_FAILED',
+      })
+    }
+
+    const googleUser = await google.user()
+
+    // Find existing user by googleId or email
+    let user = await User.query()
+      .where('google_id', googleUser.id)
+      .orWhere('email', googleUser.email!)
+      .first()
+
+    if (user) {
+      // Link Google account if not already linked
+      if (!user.googleId) {
+        user.googleId = googleUser.id
+        await user.save()
+      }
+    } else {
+      // Create new user
+      const baseUsername = googleUser
+        .email!.split('@')[0]
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '')
+      let username = baseUsername
+      let counter = 1
+
+      // Ensure unique username
+      while (await User.findBy('username', username)) {
+        username = `${baseUsername}${counter}`
+        counter++
+      }
+
+      user = await User.create({
+        email: googleUser.email!,
+        googleId: googleUser.id,
+        displayName: googleUser.name,
+        username,
+        avatar: googleUser.avatarUrl,
+      })
+
+      await mail.send((message) => {
+        message.from('noreply@email.trackrr.app', 'Trackr')
+        message.to(user!.email)
+        message.subject('Welcome to Trackr')
+        message.html(`<p>Welcome to Trackr, ${user!.displayName}!</p>`)
+      })
+    }
+
+    const token = await User.accessTokens.create(user)
+
+    // Redirect to mobile app with deep link
+    const deepLinkUrl = `trackr://auth/callback?token=${token.value!.release()}`
+    return response.redirect(deepLinkUrl)
+  }
 }

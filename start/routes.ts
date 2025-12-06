@@ -39,6 +39,8 @@ router
     router.post('/login', [AuthController, 'login'])
     router.post('/forgot-password', [AuthController, 'forgotPassword'])
     router.post('/reset-password', [AuthController, 'resetPassword'])
+    router.get('/google/redirect', [AuthController, 'googleRedirect'])
+    router.get('/google/callback', [AuthController, 'googleCallback'])
   })
   .prefix('auth')
 
