@@ -15,3 +15,16 @@ export const loginSchema = vine.compile(
     password: vine.string().minLength(8).trim(),
   })
 )
+
+export const forgotPasswordSchema = vine.compile(
+  vine.object({
+    email: vine.string().email().trim(),
+  })
+)
+
+export const resetPasswordSchema = vine.compile(
+  vine.object({
+    token: vine.string().trim(),
+    password: vine.string().minLength(8).trim(),
+  })
+)
