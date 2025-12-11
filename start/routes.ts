@@ -18,6 +18,7 @@ const RecapController = () => import('#controllers/recap_controller')
 const ChatsController = () => import('#controllers/chats_controller')
 const StatsController = () => import('#controllers/stats_controller')
 const SubscriptionsController = () => import('#controllers/subscriptions_controller')
+const ReportsController = () => import('#controllers/reports_controller')
 
 import AutoSwagger from 'adonis-autoswagger'
 import swagger from '#config/swagger'
@@ -120,6 +121,15 @@ router
     router.post('/:bookId', [ChatsController, 'stream'])
   })
   .prefix('chat')
+
+// Reports (requires authentication)
+router
+  .group(() => {
+    router.post('/', [ReportsController, 'create'])
+    router.get('/my', [ReportsController, 'myReports'])
+    router.delete('/:id', [ReportsController, 'delete'])
+  })
+  .prefix('reports')
 
 // Webhooks (no auth required - verified via webhook secret)
 router

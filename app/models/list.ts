@@ -1,8 +1,9 @@
 import { DateTime } from 'luxon'
-import { BaseModel, column, belongsTo, manyToMany, computed } from '@adonisjs/lucid/orm'
+import { BaseModel, column, belongsTo, manyToMany, computed, beforeSave } from '@adonisjs/lucid/orm'
 import type { BelongsTo, ManyToMany } from '@adonisjs/lucid/types/relations'
 import User from '#models/user'
 import Book from '#models/book'
+import ContentFilterService from '#services/content_filter_service'
 
 const parseStringArray = (value: unknown): string[] | null => {
   if (Array.isArray(value)) {
@@ -153,5 +154,74 @@ export default class List extends BaseModel {
       return false
     }
     return this.savedBy.some((user) => user.id === userId)
+  }
+
+  @beforeSave()
+  static async validateContent(list: List) {
+    // Validate and censor list name
+    if (list.$dirty.name) {
+      const nameCheck = ContentFilterService.validateAndCensor(list.name, 'list_name', {
+        autoReject: false,
+        autoCensor: true,
+      })
+      if (nameCheck.content !== list.name && list.userId) {
+        await ContentFilterService.logModeration(
+          list.userId,
+          'list_name',
+          list.name,
+          nameCheck.content,
+          nameCheck.reason!,
+          list.id?.toString() ?? null
+        )
+        list.name = nameCheck.content
+      }
+    }
+
+    // Validate and censor description
+    if (list.$dirty.description && list.description) {
+      const descCheck = ContentFilterService.validateAndCensor(
+        list.description,
+        'list_description',
+        {
+          autoReject: false,
+          autoCensor: true,
+        }
+      )
+      if (descCheck.content !== list.description && list.userId) {
+        await ContentFilterService.logModeration(
+          list.userId,
+          'list_description',
+          list.description,
+          descCheck.content,
+          descCheck.reason!,
+          list.id?.toString() ?? null
+        )
+        list.description = descCheck.content
+      }
+    }
+
+    // Validate and censor tags
+    if (list.$dirty.tags && list.tags && list.tags.length > 0) {
+      const censoredTags = list.tags.map((tag) => {
+        const tagCheck = ContentFilterService.validateAndCensor(tag, 'list_tags', {
+          autoReject: false,
+          autoCensor: true,
+        })
+        return tagCheck.content
+      })
+
+      const hasChanges = censoredTags.some((tag, index) => tag !== list.tags![index])
+      if (hasChanges && list.userId) {
+        await ContentFilterService.logModeration(
+          list.userId,
+          'list_tags',
+          JSON.stringify(list.tags),
+          JSON.stringify(censoredTags),
+          'profanity',
+          list.id?.toString() ?? null
+        )
+        list.tags = censoredTags
+      }
+    }
   }
 }

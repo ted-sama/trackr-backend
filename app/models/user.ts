@@ -1,7 +1,14 @@
 import { DateTime } from 'luxon'
 import hash from '@adonisjs/core/services/hash'
 import { compose } from '@adonisjs/core/helpers'
-import { BaseModel, column, hasMany, beforeCreate, manyToMany } from '@adonisjs/lucid/orm'
+import {
+  BaseModel,
+  column,
+  hasMany,
+  beforeCreate,
+  beforeSave,
+  manyToMany,
+} from '@adonisjs/lucid/orm'
 import { withAuthFinder } from '@adonisjs/auth/mixins/lucid'
 import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
 import type { HasMany, ManyToMany } from '@adonisjs/lucid/types/relations'
@@ -9,6 +16,8 @@ import { randomUUID } from 'node:crypto'
 import List from '#models/list'
 import BookTracking from '#models/book_tracking'
 import Book from './book.js'
+import ContentFilterService from '#services/content_filter_service'
+import AppError from '#exceptions/app_error'
 
 const AuthFinder = withAuthFinder(() => hash.use('scrypt'), {
   uids: ['email'],
@@ -127,5 +136,44 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
     // Admin-granted Plus without expiration
     return true
+  }
+
+  @beforeSave()
+  static async validateContent(user: User) {
+    // Validate username (reject if offensive)
+    if (user.$dirty.username) {
+      const usernameCheck = ContentFilterService.validateAndCensor(user.username, 'username', {
+        autoReject: true,
+        autoCensor: false,
+      })
+      if (!usernameCheck.isValid) {
+        throw new AppError(
+          'Username contains inappropriate content. Please choose a different username.',
+          { status: 400, code: 'INVALID_USERNAME' }
+        )
+      }
+    }
+
+    // Validate and censor displayName
+    if (user.$dirty.displayName && user.displayName) {
+      const displayNameCheck = ContentFilterService.validateAndCensor(
+        user.displayName,
+        'display_name',
+        { autoReject: false, autoCensor: true }
+      )
+      if (displayNameCheck.content !== user.displayName) {
+        // Log the moderation if user already exists (update case)
+        if (user.id) {
+          await ContentFilterService.logModeration(
+            user.id,
+            'display_name',
+            user.displayName,
+            displayNameCheck.content,
+            displayNameCheck.reason!
+          )
+        }
+        user.displayName = displayNameCheck.content
+      }
+    }
   }
 }
