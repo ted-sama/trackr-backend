@@ -145,6 +145,11 @@ export default class BooksController {
     }
 
     const normalizedQuery = query.trim().toLowerCase()
+    // Nettoyer la ponctuation pour la recherche par similarité pg_trgm
+    const cleanedQuery = normalizedQuery
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
 
     const bookQuery = Book.query().select('*')
 
@@ -165,23 +170,31 @@ export default class BooksController {
           `
         CASE 
           WHEN LOWER(title) = ? THEN 100
-          WHEN LOWER(title) LIKE ? THEN 90
+          WHEN LOWER(title) LIKE ? THEN 95
+          WHEN similarity(LOWER(title), ?) > 0.6 THEN 90
+          WHEN similarity(LOWER(title), ?) > 0.4 THEN 85
           WHEN search_text ILIKE ? AND LOWER(title) != ? THEN 80
+          WHEN similarity(search_text, ?) > 0.4 THEN 75
           WHEN EXISTS (
             SELECT 1 FROM author_books ab
             JOIN authors a ON a.id = ab.author_id
             WHERE ab.book_id = books.id
               AND a.name ILIKE ?
           ) THEN 70
+          WHEN similarity(search_text, ?) > 0.3 THEN 65
           ELSE 50
         END as relevance_score
       `,
           [
             normalizedQuery,
             `${normalizedQuery}%`,
+            cleanedQuery, // similarity > 0.6
+            cleanedQuery, // similarity > 0.4
             `%${normalizedQuery}%`,
             normalizedQuery,
+            cleanedQuery, // similarity search_text > 0.4
             `%${normalizedQuery}%`,
+            cleanedQuery, // similarity search_text > 0.3
           ]
         )
       )
@@ -190,12 +203,23 @@ export default class BooksController {
           .whereRaw('LOWER(title) = ?', [normalizedQuery])
           .orWhereILike('title', `%${normalizedQuery}%`)
           .orWhereILike('search_text', `%${normalizedQuery}%`)
+          // Recherche par similarité pg_trgm (gère ponctuation, fautes de frappe, etc.)
+          .orWhereRaw('similarity(LOWER(title), ?) > 0.3', [cleanedQuery])
+          .orWhereRaw('search_text % ?', [cleanedQuery])
           .orWhereExists((existsQuery) => {
             existsQuery
               .from('author_books as ab')
               .innerJoin('authors as a', 'a.id', 'ab.author_id')
               .whereRaw('ab.book_id = books.id')
               .whereILike('a.name', `%${normalizedQuery}%`)
+          })
+          // Recherche par similarité sur les noms d'auteurs
+          .orWhereExists((existsQuery) => {
+            existsQuery
+              .from('author_books as ab')
+              .innerJoin('authors as a', 'a.id', 'ab.author_id')
+              .whereRaw('ab.book_id = books.id')
+              .whereRaw('similarity(LOWER(a.name), ?) > 0.3', [cleanedQuery])
           })
       })
       .preload('authors')
