@@ -19,6 +19,7 @@ const ChatsController = () => import('#controllers/chats_controller')
 const StatsController = () => import('#controllers/stats_controller')
 const SubscriptionsController = () => import('#controllers/subscriptions_controller')
 const ReportsController = () => import('#controllers/reports_controller')
+const ReviewsController = () => import('#controllers/reviews_controller')
 
 import AutoSwagger from 'adonis-autoswagger'
 import swagger from '#config/swagger'
@@ -76,6 +77,7 @@ router
     router.get('/:username/activity', [UsersController, 'showUserActivity'])
     router.get('/:username/stats', [StatsController, 'showUserStats'])
     router.get('/:username/books', [LibraryController, 'showUserBooks'])
+    router.get('/:username/reviews', [ReviewsController, 'userReviews'])
   })
   .prefix('users')
 
@@ -86,6 +88,14 @@ router
     router.get('/:id', [BooksController, 'show'])
     router.get('/:id/same', [BooksController, 'getBySame'])
     router.get('/:id/recap/:chapterId', [RecapController, 'recap'])
+    router.get('/:bookId/reviews', [ReviewsController, 'index'])
+    router.get('/:bookId/reviews/me', [ReviewsController, 'myReview'])
+    router.post('/:bookId/reviews', [ReviewsController, 'store'])
+    router.get('/:bookId/reviews/:id', [ReviewsController, 'show'])
+    router.patch('/:bookId/reviews/:id', [ReviewsController, 'update'])
+    router.delete('/:bookId/reviews/:id', [ReviewsController, 'destroy'])
+    router.post('/:bookId/reviews/:id/like', [ReviewsController, 'like'])
+    router.delete('/:bookId/reviews/:id/like', [ReviewsController, 'unlike'])
   })
   .prefix('books')
 

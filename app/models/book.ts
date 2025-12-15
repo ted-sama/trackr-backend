@@ -4,6 +4,7 @@ import type { ManyToMany, HasMany } from '@adonisjs/lucid/types/relations'
 import Category from '#models/category'
 import List from '#models/list'
 import BookTracking from '#models/book_tracking'
+import BookReview from '#models/book_review'
 import Author from '#models/author'
 import Publisher from '#models/publisher'
 
@@ -127,6 +128,9 @@ export default class Book extends BaseModel {
 
   @hasMany(() => BookTracking)
   declare bookTrackings: HasMany<typeof BookTracking>
+
+  @hasMany(() => BookReview)
+  declare reviews: HasMany<typeof BookReview>
 
   @manyToMany(() => Author, {
     pivotTable: 'author_books',

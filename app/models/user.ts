@@ -15,6 +15,7 @@ import type { HasMany, ManyToMany } from '@adonisjs/lucid/types/relations'
 import { randomUUID } from 'node:crypto'
 import List from '#models/list'
 import BookTracking from '#models/book_tracking'
+import BookReview from '#models/book_review'
 import Book from './book.js'
 import ContentFilterService from '#services/content_filter_service'
 import AppError from '#exceptions/app_error'
@@ -110,6 +111,9 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
   @hasMany(() => BookTracking)
   declare bookTrackings: HasMany<typeof BookTracking>
+
+  @hasMany(() => BookReview)
+  declare reviews: HasMany<typeof BookReview>
 
   @manyToMany(() => Book, {
     pivotTable: 'users_top_books',

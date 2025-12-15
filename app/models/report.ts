@@ -6,7 +6,7 @@ import User from '#models/user'
 
 export type ReportReason = 'offensive_content' | 'spam' | 'harassment' | 'other'
 export type ReportStatus = 'pending' | 'reviewed' | 'resolved' | 'rejected'
-export type ReportResourceType = 'user' | 'list'
+export type ReportResourceType = 'user' | 'list' | 'review'
 
 export default class Report extends BaseModel {
   @column({ isPrimary: true })
