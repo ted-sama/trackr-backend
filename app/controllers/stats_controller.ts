@@ -11,7 +11,7 @@ export default class StatsController {
    * @summary Get user statistics
    * @description Returns various statistics about the user's reading habits (Plus subscription required)
    */
-  async index({ auth, response }: HttpContext) {
+  async index({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
 
     // Check if user has Plus subscription
@@ -26,6 +26,9 @@ export default class StatsController {
       })
     }
 
+    // Get timezone from query param (e.g., 'Europe/Paris') or default to UTC
+    const timezone = request.input('timezone', 'UTC')
+
     // 1. Overview Stats
     const overview = await this.getOverviewStats(user.id)
 
@@ -36,7 +39,7 @@ export default class StatsController {
     const activity = await this.getActivityStats(user.id)
 
     // 4. Preferences
-    const preferences = await this.getPreferences(user.id)
+    const preferences = await this.getPreferences(user.id, timezone)
 
     // 5. Series Stats
     const series = await this.getSeriesStats(user.id)
@@ -62,7 +65,7 @@ export default class StatsController {
    * @summary Get any user's statistics by username
    * @description Returns various statistics about a specific user's reading habits (target user must have Plus subscription)
    */
-  async showUserStats({ params, response }: HttpContext) {
+  async showUserStats({ params, request, response }: HttpContext) {
     const user = await User.findBy('username', params.username)
     if (!user) {
       return response.notFound({ message: 'User not found' })
@@ -79,6 +82,9 @@ export default class StatsController {
       })
     }
 
+    // Get timezone from query param (e.g., 'Europe/Paris') or default to UTC
+    const timezone = request.input('timezone', 'UTC')
+
     // 1. Overview Stats
     const overview = await this.getOverviewStats(user.id)
 
@@ -89,7 +95,7 @@ export default class StatsController {
     const activity = await this.getActivityStats(user.id)
 
     // 4. Preferences
-    const preferences = await this.getPreferences(user.id)
+    const preferences = await this.getPreferences(user.id, timezone)
 
     // 5. Series Stats
     const series = await this.getSeriesStats(user.id)
@@ -247,15 +253,16 @@ export default class StatsController {
     }
   }
 
-  private async getPreferences(userId: string) {
+  private async getPreferences(userId: string, timezone: string = 'UTC') {
     // Preferred reading days/hours based on activity
     // Heatmap data: day (0-6), hour (0-23), count
+    // Convert timestamps to user's local timezone before extracting day/hour
 
     const heatmap = await db.rawQuery(
       `
-      SELECT 
-        EXTRACT(DOW FROM created_at) as day,
-        EXTRACT(HOUR FROM created_at) as hour,
+      SELECT
+        EXTRACT(DOW FROM created_at::timestamptz AT TIME ZONE ?) as day,
+        EXTRACT(HOUR FROM created_at::timestamptz AT TIME ZONE ?) as hour,
         COUNT(*) as count
       FROM activity_logs
       WHERE user_id = ?
@@ -263,7 +270,7 @@ export default class StatsController {
       GROUP BY day, hour
       ORDER BY day, hour
     `,
-      [userId]
+      [timezone, timezone, userId]
     )
 
     return {
