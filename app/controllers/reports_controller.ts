@@ -1,13 +1,14 @@
 import Report from '#models/report'
 import List from '#models/list'
 import User from '#models/user'
+import BookReview from '#models/book_review'
 import AppError from '#exceptions/app_error'
 import type { HttpContext } from '@adonisjs/core/http'
 import vine from '@vinejs/vine'
 
 const createReportSchema = vine.compile(
   vine.object({
-    resourceType: vine.enum(['user', 'list']),
+    resourceType: vine.enum(['user', 'list', 'review']),
     resourceId: vine.string(),
     reason: vine.enum(['offensive_content', 'spam', 'harassment', 'other']),
     description: vine.string().maxLength(1000).optional(),
@@ -53,6 +54,20 @@ export default class ReportsController {
       // Check if user is trying to report themselves
       if (data.resourceId === user.id) {
         throw new AppError('Cannot report yourself', { status: 400, code: 'INVALID_INPUT' })
+      }
+    } else if (data.resourceType === 'review') {
+      // Review IDs are integers
+      const reviewId = Number.parseInt(data.resourceId, 10)
+      if (Number.isNaN(reviewId)) {
+        throw new AppError('Invalid review ID', { status: 400, code: 'INVALID_INPUT' })
+      }
+      const review = await BookReview.find(reviewId)
+      if (!review) {
+        throw new AppError('Review not found', { status: 404, code: 'NOT_FOUND' })
+      }
+      // Check if user is trying to report their own review
+      if (review.userId === user.id) {
+        throw new AppError('Cannot report your own content', { status: 400, code: 'INVALID_INPUT' })
       }
     }
 

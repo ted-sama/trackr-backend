@@ -30,6 +30,9 @@ export default class BookReview extends BaseModel {
   @column()
   declare revisionsCount: number
 
+  @column()
+  declare isSpoiler: boolean
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 

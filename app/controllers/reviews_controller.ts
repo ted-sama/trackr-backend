@@ -4,6 +4,7 @@ import Book from '#models/book'
 import User from '#models/user'
 import BookTracking from '#models/book_tracking'
 import AppError from '#exceptions/app_error'
+import { ActivityLogger } from '#services/activity_logger'
 import {
   createReviewSchema,
   updateReviewSchema,
@@ -144,7 +145,7 @@ export default class ReviewsController {
     const user = await auth.authenticate()
     const payload = await request.validateUsing(createReviewSchema)
     const { bookId } = payload.params
-    const { content } = payload
+    const { content, isSpoiler } = payload
 
     // Verify book exists
     const book = await Book.find(bookId)
@@ -196,9 +197,23 @@ export default class ReviewsController {
       rating: tracking.rating,
       likesCount: 0,
       revisionsCount: 0,
+      isSpoiler: isSpoiler ?? false,
     })
 
     await review.load('user')
+
+    // Log activity
+    await ActivityLogger.log({
+      userId: user.id,
+      action: 'book.reviewCreated',
+      resourceType: 'book',
+      resourceId: bookId,
+      metadata: {
+        reviewId: review.id,
+        rating: tracking.rating,
+        contentLength: content.length,
+      },
+    })
 
     return response.created(
       review.serialize({
@@ -278,7 +293,7 @@ export default class ReviewsController {
     const user = await auth.authenticate()
     const payload = await request.validateUsing(updateReviewSchema)
     const { bookId, id } = payload.params
-    const { content } = payload
+    const { content, isSpoiler } = payload
 
     const review = await BookReview.query().where('id', id).where('book_id', bookId).first()
 
@@ -321,9 +336,26 @@ export default class ReviewsController {
     review.content = content
     review.rating = tracking.rating
     review.revisionsCount += 1
+    if (isSpoiler !== undefined) {
+      review.isSpoiler = isSpoiler
+    }
     await review.save()
 
     await review.load('user')
+
+    // Log activity
+    await ActivityLogger.log({
+      userId: user.id,
+      action: 'book.reviewUpdated',
+      resourceType: 'book',
+      resourceId: bookId,
+      metadata: {
+        reviewId: review.id,
+        rating: tracking.rating,
+        contentLength: content.length,
+        revisionsCount: review.revisionsCount,
+      },
+    })
 
     return response.ok(
       review.serialize({
@@ -364,7 +396,24 @@ export default class ReviewsController {
       })
     }
 
+    // Store data for logging before deletion
+    const reviewData = {
+      reviewId: review.id,
+      bookId: review.bookId,
+      likesCount: review.likesCount,
+      revisionsCount: review.revisionsCount,
+    }
+
     await review.delete()
+
+    // Log activity
+    await ActivityLogger.log({
+      userId: user.id,
+      action: 'book.reviewDeleted',
+      resourceType: 'book',
+      resourceId: reviewData.bookId,
+      metadata: reviewData,
+    })
 
     return response.noContent()
   }
@@ -402,9 +451,8 @@ export default class ReviewsController {
     // Add like
     await review.related('likedBy').attach([user.id])
 
-    // Increment likes count
-    review.likesCount += 1
-    await review.save()
+    // Increment likes count without updating updatedAt
+    await BookReview.query().where('id', id).increment('likes_count', 1)
 
     return response.ok({ message: 'Review liked successfully' })
   }
@@ -442,9 +490,11 @@ export default class ReviewsController {
     // Remove like
     await review.related('likedBy').detach([user.id])
 
-    // Decrement likes count
-    review.likesCount = Math.max(0, review.likesCount - 1)
-    await review.save()
+    // Decrement likes count without updating updatedAt
+    await BookReview.query()
+      .where('id', id)
+      .where('likes_count', '>', 0)
+      .decrement('likes_count', 1)
 
     return response.ok({ message: 'Review unliked successfully' })
   }

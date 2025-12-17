@@ -6,6 +6,7 @@ export const createReviewSchema = vine.compile(
       bookId: vine.number().positive(),
     }),
     content: vine.string().trim().minLength(1).maxLength(2000),
+    isSpoiler: vine.boolean().optional(),
   })
 )
 
@@ -16,6 +17,7 @@ export const updateReviewSchema = vine.compile(
       id: vine.number().positive(),
     }),
     content: vine.string().trim().minLength(1).maxLength(2000),
+    isSpoiler: vine.boolean().optional(),
   })
 )
 
