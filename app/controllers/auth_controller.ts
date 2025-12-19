@@ -2,6 +2,7 @@ import User from '#models/user'
 import AppError from '#exceptions/app_error'
 import type { HttpContext } from '@adonisjs/core/http'
 import mail from '@adonisjs/mail/services/main'
+import hash from '@adonisjs/core/services/hash'
 import {
   loginSchema,
   registerSchema,
@@ -23,9 +24,11 @@ export default class AuthController {
    * @responseBody 409 - {"code": "AUTH_USER_ALREADY_EXISTS", "message": "User already exists"} - User already exists
    */
   async register({ request, response }: HttpContext) {
-    const { email, username, displayName, password } = await registerSchema.validate(request.body())
+    const data = await registerSchema.validate(request.body())
+    const email = data.email.toLowerCase()
+    const { username, displayName, password } = data
 
-    const existingUserByEmail = await User.findBy('email', email)
+    const existingUserByEmail = await User.query().whereRaw('LOWER(email) = ?', [email]).first()
     const existingUserByUsername = await User.findBy('username', username)
 
     if (existingUserByEmail) {
@@ -75,11 +78,23 @@ export default class AuthController {
    * @responseBody 422 - Validation error
    */
   async login({ request, response }: HttpContext) {
-    const { email, password } = await loginSchema.validate(request.body())
+    const data = await loginSchema.validate(request.body())
+    const email = data.email.toLowerCase()
+    const { password } = data
 
-    const user = await User.verifyCredentials(email, password)
+    // Find user with case-insensitive email search
+    const user = await User.query().whereRaw('LOWER(email) = ?', [email]).first()
 
-    if (!user) {
+    if (!user || !user.password) {
+      throw new AppError('Invalid credentials', {
+        status: 400,
+        code: 'AUTH_INVALID_CREDENTIALS',
+      })
+    }
+
+    // Verify password
+    const isPasswordValid = await hash.verify(user.password, password)
+    if (!isPasswordValid) {
       throw new AppError('Invalid credentials', {
         status: 400,
         code: 'AUTH_INVALID_CREDENTIALS',
@@ -100,9 +115,10 @@ export default class AuthController {
    * @responseBody 422 - Validation error
    */
   async forgotPassword({ request, response }: HttpContext) {
-    const { email } = await forgotPasswordSchema.validate(request.body())
+    const data = await forgotPasswordSchema.validate(request.body())
+    const email = data.email.toLowerCase()
 
-    const user = await User.findBy('email', email)
+    const user = await User.query().whereRaw('LOWER(email) = ?', [email]).first()
 
     // Always return success message to prevent user enumeration
     if (!user) {
@@ -230,17 +246,24 @@ export default class AuthController {
     }
 
     const googleUser = await google.user()
+    const googleEmail = googleUser.email!.toLowerCase()
 
-    // Find existing user by googleId or email
+    // Find existing user by googleId or email (case-insensitive)
     let user = await User.query()
       .where('google_id', googleUser.id)
-      .orWhere('email', googleUser.email!)
+      .orWhereRaw('LOWER(email) = ?', [googleEmail])
       .first()
 
     if (user) {
-      // Link Google account if not already linked
-      if (!user.googleId) {
-        user.googleId = googleUser.id
+      // Link Google account if not already linked and normalize email
+      if (!user.googleId || user.email !== googleEmail) {
+        if (!user.googleId) {
+          user.googleId = googleUser.id
+        }
+        // Normalize email to lowercase if needed
+        if (user.email.toLowerCase() === googleEmail && user.email !== googleEmail) {
+          user.email = googleEmail
+        }
         await user.save()
       }
     } else {
@@ -259,7 +282,7 @@ export default class AuthController {
       }
 
       user = await User.create({
-        email: googleUser.email!,
+        email: googleEmail,
         googleId: googleUser.id,
         displayName: googleUser.name,
         username,
