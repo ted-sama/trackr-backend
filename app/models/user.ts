@@ -44,6 +44,12 @@ export default class User extends compose(BaseModel, AuthFinder) {
     user.plan = 'free'
   }
 
+  @beforeCreate()
+  static assignPrivacyDefaults(user: User) {
+    user.isStatsPublic = true
+    user.isActivityPublic = true
+  }
+
   @column()
   declare username: string
 
@@ -99,6 +105,13 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
   @column.dateTime({ serializeAs: null })
   declare chatRequestsResetAt: DateTime | null
+
+  // Privacy settings
+  @column()
+  declare isStatsPublic: boolean
+
+  @column()
+  declare isActivityPublic: boolean
 
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime

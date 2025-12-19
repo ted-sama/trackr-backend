@@ -65,10 +65,22 @@ export default class StatsController {
    * @summary Get any user's statistics by username
    * @description Returns various statistics about a specific user's reading habits (target user must have Plus subscription)
    */
-  async showUserStats({ params, request, response }: HttpContext) {
+  async showUserStats({ auth, params, request, response }: HttpContext) {
     const user = await User.findBy('username', params.username)
     if (!user) {
       return response.notFound({ message: 'User not found' })
+    }
+
+    // Check if current user is the owner (to allow viewing own private stats)
+    const currentUser = await auth.check() ? auth.user : null
+    const isOwner = currentUser?.id === user.id
+
+    // Check if stats are private and requester is not the owner
+    if (!user.isStatsPublic && !isOwner) {
+      throw new AppError('This user\'s statistics are private', {
+        status: 403,
+        code: 'STATS_PRIVATE',
+      })
     }
 
     // Check if target user has Plus subscription (stats are a Plus feature)

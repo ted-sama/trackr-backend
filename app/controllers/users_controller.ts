@@ -96,6 +96,8 @@ export default class UsersController {
           'backdropMode',
           'backdropColor',
           'backdropImage',
+          'isStatsPublic',
+          'isActivityPublic',
           'createdAt',
         ],
       },
@@ -209,7 +211,7 @@ export default class UsersController {
 
   async update({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
-    const { username, displayName, backdropMode, backdropColor } =
+    const { username, displayName, backdropMode, backdropColor, isStatsPublic, isActivityPublic } =
       await request.validateUsing(updateSchema)
 
     if (username && username !== user.username) {
@@ -242,7 +244,9 @@ export default class UsersController {
       user.merge({ backdropImage: null })
     }
 
-    await user.merge({ username, displayName, backdropMode, backdropColor }).save()
+    await user
+      .merge({ username, displayName, backdropMode, backdropColor, isStatsPublic, isActivityPublic })
+      .save()
     return response.ok(user)
   }
 
@@ -468,7 +472,7 @@ export default class UsersController {
     })
   }
 
-  async showUserActivity({ request, response }: HttpContext) {
+  async showUserActivity({ auth, request, response }: HttpContext) {
     const { page = 1, limit = 10 } = request.qs()
     const { params } = await request.validateUsing(showSchema)
     const { username } = params
@@ -480,6 +484,19 @@ export default class UsersController {
         code: 'USER_NOT_FOUND',
       })
     }
+
+    // Check if current user is the owner (to allow viewing own private activity)
+    const currentUser = (await auth.check()) ? auth.user : null
+    const isOwner = currentUser?.id === user.id
+
+    // Check if activity is private and requester is not the owner
+    if (!user.isActivityPublic && !isOwner) {
+      throw new AppError("This user's activity is private", {
+        status: 403,
+        code: 'ACTIVITY_PRIVATE',
+      })
+    }
+
     const activity = await ActivityLog.query()
       .where('user_id', user.id)
       .orderBy('created_at', 'desc')
