@@ -8,6 +8,7 @@ import {
   registerSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  checkEmailSchema,
 } from '#validators/auth'
 import PasswordResetToken from '#models/password_reset_token'
 import { DateTime } from 'luxon'
@@ -208,6 +209,24 @@ export default class AuthController {
     return response.ok({
       message: 'Password has been reset successfully',
     })
+  }
+
+  /**
+   * @summary Check if email exists
+   * @tag Authentication
+   * @description Checks if an account exists with the given email
+   * @requestBody <checkEmailSchema> - Email to check
+   * @responseBody 200 - {"exists": true} - Email exists
+   * @responseBody 200 - {"exists": false} - Email does not exist
+   * @responseBody 422 - Validation error
+   */
+  async checkEmail({ request, response }: HttpContext) {
+    const data = await checkEmailSchema.validate(request.body())
+    const email = data.email.toLowerCase()
+
+    const existingUser = await User.query().whereRaw('LOWER(email) = ?', [email]).first()
+
+    return response.ok({ exists: !!existingUser })
   }
 
   /**

@@ -34,3 +34,9 @@ export const googleCallbackSchema = vine.compile(
     idToken: vine.string().trim(),
   })
 )
+
+export const checkEmailSchema = vine.compile(
+  vine.object({
+    email: vine.string().email().trim(),
+  })
+)

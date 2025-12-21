@@ -39,6 +39,7 @@ router
   .group(() => {
     router.post('/register', [AuthController, 'register'])
     router.post('/login', [AuthController, 'login'])
+    router.post('/check-email', [AuthController, 'checkEmail'])
     router.post('/forgot-password', [AuthController, 'forgotPassword'])
     router.post('/reset-password', [AuthController, 'resetPassword'])
     router.get('/google/redirect', [AuthController, 'googleRedirect'])
