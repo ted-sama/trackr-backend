@@ -27,8 +27,14 @@ export interface NotificationPreferences {
   listSaves?: boolean
 }
 
+export interface PrivacyPreferences {
+  statsPublic?: boolean
+  activityPublic?: boolean
+}
+
 export interface UserPreferences {
   notifications?: NotificationPreferences
+  privacy?: PrivacyPreferences
 }
 
 const AuthFinder = withAuthFinder(() => hash.use('scrypt'), {
@@ -55,11 +61,6 @@ export default class User extends compose(BaseModel, AuthFinder) {
     user.plan = 'free'
   }
 
-  @beforeCreate()
-  static assignPrivacyDefaults(user: User) {
-    user.isStatsPublic = true
-    user.isActivityPublic = true
-  }
 
   @column()
   declare username: string
@@ -117,12 +118,6 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column.dateTime({ serializeAs: null })
   declare chatRequestsResetAt: DateTime | null
 
-  // Privacy settings
-  @column()
-  declare isStatsPublic: boolean
-
-  @column()
-  declare isActivityPublic: boolean
 
   // Push notifications
   @column({ serializeAs: null })
@@ -198,6 +193,42 @@ export default class User extends compose(BaseModel, AuthFinder) {
       ...this.preferences,
       notifications: {
         ...this.preferences?.notifications,
+        ...prefs,
+      },
+    }
+  }
+
+  /**
+   * Privacy preferences helpers (default to true if not set)
+   */
+  @computed()
+  get isStatsPublic(): boolean {
+    return this.preferences?.privacy?.statsPublic ?? true
+  }
+
+  @computed()
+  get isActivityPublic(): boolean {
+    return this.preferences?.privacy?.activityPublic ?? true
+  }
+
+  /**
+   * Get all privacy preferences
+   */
+  getPrivacyPreferences(): PrivacyPreferences {
+    return {
+      statsPublic: this.isStatsPublic,
+      activityPublic: this.isActivityPublic,
+    }
+  }
+
+  /**
+   * Update privacy preferences
+   */
+  setPrivacyPreferences(prefs: Partial<PrivacyPreferences>) {
+    this.preferences = {
+      ...this.preferences,
+      privacy: {
+        ...this.preferences?.privacy,
         ...prefs,
       },
     }

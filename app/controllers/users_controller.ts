@@ -244,14 +244,20 @@ export default class UsersController {
       user.merge({ backdropImage: null })
     }
 
+    // Update privacy preferences if provided
+    if (isStatsPublic !== undefined || isActivityPublic !== undefined) {
+      const privacyUpdates: Record<string, boolean> = {}
+      if (isStatsPublic !== undefined) privacyUpdates.statsPublic = isStatsPublic
+      if (isActivityPublic !== undefined) privacyUpdates.activityPublic = isActivityPublic
+      user.setPrivacyPreferences(privacyUpdates)
+    }
+
     await user
       .merge({
         username,
         displayName,
         backdropMode,
         backdropColor,
-        isStatsPublic,
-        isActivityPublic,
       })
       .save()
     return response.ok(user)
