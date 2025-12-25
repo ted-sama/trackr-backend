@@ -21,6 +21,7 @@ const SubscriptionsController = () => import('#controllers/subscriptions_control
 const ReportsController = () => import('#controllers/reports_controller')
 const ReviewsController = () => import('#controllers/reviews_controller')
 const NotificationsController = () => import('#controllers/notifications_controller')
+const GenresController = () => import('#controllers/genres_controller')
 
 import AutoSwagger from 'adonis-autoswagger'
 import swagger from '#config/swagger'
@@ -158,6 +159,13 @@ router
     router.post('/read-all', [NotificationsController, 'markAllAsRead'])
   })
   .prefix('notifications')
+
+// Genres
+router
+  .group(() => {
+    router.get('/translations', [GenresController, 'translations'])
+  })
+  .prefix('genres')
 
 // Webhooks (no auth required - verified via webhook secret)
 router
