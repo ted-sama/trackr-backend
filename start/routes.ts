@@ -20,6 +20,7 @@ const StatsController = () => import('#controllers/stats_controller')
 const SubscriptionsController = () => import('#controllers/subscriptions_controller')
 const ReportsController = () => import('#controllers/reports_controller')
 const ReviewsController = () => import('#controllers/reviews_controller')
+const NotificationsController = () => import('#controllers/notifications_controller')
 
 import AutoSwagger from 'adonis-autoswagger'
 import swagger from '#config/swagger'
@@ -42,6 +43,7 @@ router
     router.post('/check-email', [AuthController, 'checkEmail'])
     router.post('/forgot-password', [AuthController, 'forgotPassword'])
     router.post('/reset-password', [AuthController, 'resetPassword'])
+    router.post('/change-password', [AuthController, 'changePassword'])
     router.get('/google/redirect', [AuthController, 'googleRedirect'])
     router.get('/google/callback', [AuthController, 'googleCallback'])
   })
@@ -51,6 +53,7 @@ router
   .group(() => {
     router.get('/', [UsersController, 'me'])
     router.patch('/', [UsersController, 'update'])
+    router.delete('/', [UsersController, 'deleteAccount'])
     router.put('/avatar', [UsersController, 'uploadAvatar'])
     router.delete('/avatar', [UsersController, 'deleteAvatar'])
     router.put('/backdrop', [UsersController, 'uploadBackdropImage'])
@@ -66,6 +69,10 @@ router
     router.get('/activity', [UsersController, 'showMyActivity'])
     router.get('/stats', [StatsController, 'index'])
     router.get('/subscription', [SubscriptionsController, 'show'])
+    router.get('/chat-usage', [SubscriptionsController, 'chatUsage'])
+    router.post('/push-token', [UsersController, 'registerPushToken'])
+    router.get('/notification-settings', [UsersController, 'getNotificationSettings'])
+    router.patch('/notification-settings', [UsersController, 'updateNotificationSettings'])
   })
   .prefix('me')
 
@@ -141,6 +148,16 @@ router
     router.delete('/:id', [ReportsController, 'delete'])
   })
   .prefix('reports')
+
+// Notifications
+router
+  .group(() => {
+    router.get('/', [NotificationsController, 'index'])
+    router.get('/unread-count', [NotificationsController, 'unreadCount'])
+    router.patch('/:id/read', [NotificationsController, 'markAsRead'])
+    router.post('/read-all', [NotificationsController, 'markAllAsRead'])
+  })
+  .prefix('notifications')
 
 // Webhooks (no auth required - verified via webhook secret)
 router

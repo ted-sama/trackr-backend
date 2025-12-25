@@ -8,6 +8,7 @@ import {
   registerSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
+  changePasswordSchema,
   checkEmailSchema,
 } from '#validators/auth'
 import PasswordResetToken from '#models/password_reset_token'
@@ -208,6 +209,47 @@ export default class AuthController {
 
     return response.ok({
       message: 'Password has been reset successfully',
+    })
+  }
+
+  /**
+   * @summary Change password
+   * @tag Authentication
+   * @description Changes the authenticated user's password
+   * @requestBody <changePasswordSchema> - Current and new password
+   * @responseBody 200 - {"message": "Password has been changed successfully"} - Success response
+   * @responseBody 400 - {"code": "AUTH_NO_PASSWORD", "message": "Cannot change password for OAuth-only accounts"} - No password
+   * @responseBody 400 - {"code": "AUTH_INVALID_CURRENT_PASSWORD", "message": "Current password is incorrect"} - Invalid current password
+   * @responseBody 401 - Unauthorized
+   * @responseBody 422 - Validation error
+   */
+  async changePassword({ auth, request, response }: HttpContext) {
+    const user = await auth.authenticate()
+    const { currentPassword, newPassword } = await changePasswordSchema.validate(request.body())
+
+    // Check if user has a password (not OAuth-only)
+    if (!user.password) {
+      throw new AppError('Cannot change password for OAuth-only accounts', {
+        status: 400,
+        code: 'AUTH_NO_PASSWORD',
+      })
+    }
+
+    // Verify current password
+    const isCurrentPasswordValid = await hash.verify(user.password, currentPassword)
+    if (!isCurrentPasswordValid) {
+      throw new AppError('Current password is incorrect', {
+        status: 400,
+        code: 'AUTH_INVALID_CURRENT_PASSWORD',
+      })
+    }
+
+    // Update password
+    user.password = newPassword
+    await user.save()
+
+    return response.ok({
+      message: 'Password has been changed successfully',
     })
   }
 

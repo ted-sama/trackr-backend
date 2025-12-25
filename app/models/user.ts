@@ -4,6 +4,7 @@ import { compose } from '@adonisjs/core/helpers'
 import {
   BaseModel,
   column,
+  computed,
   hasMany,
   beforeCreate,
   beforeSave,
@@ -19,6 +20,16 @@ import BookReview from '#models/book_review'
 import Book from './book.js'
 import ContentFilterService from '#services/content_filter_service'
 import AppError from '#exceptions/app_error'
+
+export interface NotificationPreferences {
+  reviewLikes?: boolean
+  listLikes?: boolean
+  listSaves?: boolean
+}
+
+export interface UserPreferences {
+  notifications?: NotificationPreferences
+}
 
 const AuthFinder = withAuthFinder(() => hash.use('scrypt'), {
   uids: ['email'],
@@ -75,7 +86,7 @@ export default class User extends compose(BaseModel, AuthFinder) {
   declare plan: 'free' | 'plus'
 
   @column()
-  declare preferences: Record<string, any> | null
+  declare preferences: UserPreferences | null
 
   @column()
   declare backdropMode: string
@@ -113,6 +124,10 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column()
   declare isActivityPublic: boolean
 
+  // Push notifications
+  @column({ serializeAs: null })
+  declare pushToken: string | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
@@ -139,6 +154,54 @@ export default class User extends compose(BaseModel, AuthFinder) {
     expiresIn: '30 days',
     prefix: 'trk_',
   })
+
+  /**
+   * Check if user has a password (for email-based auth)
+   * Google-only users don't have a password
+   */
+  @computed()
+  get hasPassword(): boolean {
+    return !!this.password
+  }
+
+  /**
+   * Notification preferences helpers (default to true if not set)
+   */
+  get notifyReviewLikes(): boolean {
+    return this.preferences?.notifications?.reviewLikes ?? true
+  }
+
+  get notifyListLikes(): boolean {
+    return this.preferences?.notifications?.listLikes ?? true
+  }
+
+  get notifyListSaves(): boolean {
+    return this.preferences?.notifications?.listSaves ?? true
+  }
+
+  /**
+   * Get all notification preferences
+   */
+  getNotificationPreferences(): NotificationPreferences {
+    return {
+      reviewLikes: this.notifyReviewLikes,
+      listLikes: this.notifyListLikes,
+      listSaves: this.notifyListSaves,
+    }
+  }
+
+  /**
+   * Update notification preferences
+   */
+  setNotificationPreferences(prefs: Partial<NotificationPreferences>) {
+    this.preferences = {
+      ...this.preferences,
+      notifications: {
+        ...this.preferences?.notifications,
+        ...prefs,
+      },
+    }
+  }
 
   /**
    * Check if user has an active Plus subscription

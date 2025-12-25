@@ -245,7 +245,14 @@ export default class UsersController {
     }
 
     await user
-      .merge({ username, displayName, backdropMode, backdropColor, isStatsPublic, isActivityPublic })
+      .merge({
+        username,
+        displayName,
+        backdropMode,
+        backdropColor,
+        isStatsPublic,
+        isActivityPublic,
+      })
       .save()
     return response.ok(user)
   }
@@ -509,5 +516,104 @@ export default class UsersController {
       ...activity.toJSON(),
       data: enrichedData,
     })
+  }
+
+  /**
+   * @summary Register push notification token
+   * @tag Users
+   * @description Registers an Expo push token for the authenticated user
+   * @requestBody { "pushToken": "ExponentPushToken[xxx]" }
+   * @responseBody 204 - Token registered successfully
+   * @responseBody 401 - Unauthorized
+   */
+  async registerPushToken({ auth, request, response }: HttpContext) {
+    const user = await auth.authenticate()
+    const { pushToken } = request.only(['pushToken'])
+
+    if (pushToken && typeof pushToken === 'string') {
+      await user.merge({ pushToken }).save()
+    }
+
+    return response.noContent()
+  }
+
+  /**
+   * @summary Get notification settings
+   * @tag Users
+   * @description Returns the authenticated user's notification preferences
+   * @responseBody 200 - Notification settings
+   * @responseBody 401 - Unauthorized
+   */
+  async getNotificationSettings({ auth, response }: HttpContext) {
+    const user = await auth.authenticate()
+
+    return response.ok({
+      notifyReviewLikes: user.notifyReviewLikes,
+      notifyListLikes: user.notifyListLikes,
+      notifyListSaves: user.notifyListSaves,
+    })
+  }
+
+  /**
+   * @summary Update notification settings
+   * @tag Users
+   * @description Updates the authenticated user's notification preferences
+   * @requestBody { "notifyReviewLikes": true, "notifyListLikes": true, "notifyListSaves": true }
+   * @responseBody 200 - Updated notification settings
+   * @responseBody 401 - Unauthorized
+   */
+  async updateNotificationSettings({ auth, request, response }: HttpContext) {
+    const user = await auth.authenticate()
+    const { notifyReviewLikes, notifyListLikes, notifyListSaves } = request.only([
+      'notifyReviewLikes',
+      'notifyListLikes',
+      'notifyListSaves',
+    ])
+
+    const updates: Record<string, boolean> = {}
+
+    if (typeof notifyReviewLikes === 'boolean') {
+      updates.reviewLikes = notifyReviewLikes
+    }
+    if (typeof notifyListLikes === 'boolean') {
+      updates.listLikes = notifyListLikes
+    }
+    if (typeof notifyListSaves === 'boolean') {
+      updates.listSaves = notifyListSaves
+    }
+
+    user.setNotificationPreferences(updates)
+    await user.save()
+
+    return response.ok({
+      notifyReviewLikes: user.notifyReviewLikes,
+      notifyListLikes: user.notifyListLikes,
+      notifyListSaves: user.notifyListSaves,
+    })
+  }
+
+  /**
+   * @summary Delete current user account
+   * @tag Users
+   * @description Permanently deletes the authenticated user's account and all associated data
+   * @responseBody 204 - Account deleted successfully
+   * @responseBody 401 - Unauthorized
+   */
+  async deleteAccount({ auth, response }: HttpContext) {
+    const user = await auth.authenticate()
+
+    // Delete the user - cascading will handle:
+    // - access_tokens (auth_access_tokens.tokenable_id -> users.id)
+    // - lists (lists.user_id -> users.id)
+    // - book_trackings (book_trackings.user_id -> users.id)
+    // - book_reviews (book_reviews.user_id -> users.id)
+    // - password_reset_tokens (password_reset_tokens.user_id -> users.id)
+    // - activity_logs (activity_logs.user_id -> users.id)
+    // - reports (reports.reporter_id -> users.id)
+    // - users_top_books (users_top_books.user_id -> users.id)
+    // Note: S3 files (avatar, backdrop) are left orphaned - can be cleaned up via a separate process
+    await user.delete()
+
+    return response.noContent()
   }
 }

@@ -9,6 +9,7 @@ import {
 } from 'ai'
 import { createOpenRouter } from '@openrouter/ai-sdk-provider'
 import Book from '#models/book'
+import ChatBookUsage from '#models/chat_book_usage'
 import SubscriptionsController, { CHAT_LIMITS } from '#controllers/subscriptions_controller'
 import AppError from '#exceptions/app_error'
 
@@ -268,8 +269,11 @@ NE FAIS PAS de recherche sur d'autres livres sauf si l'utilisateur mentionne exp
       system: systemPrompt,
     })
 
-    // Increment chat request counter
+    // Increment chat request counter (global user limit)
     await SubscriptionsController.incrementChatRequest(user)
+
+    // Track usage per book (all-time + monthly)
+    await ChatBookUsage.incrementUsage(user.id, bookId, user.chatRequestsResetAt)
 
     // Masquer le raisonnement de Perplexity
     return result.pipeUIMessageStreamToResponse(response.response, {

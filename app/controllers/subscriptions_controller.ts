@@ -1,6 +1,7 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import User from '#models/user'
 import List from '#models/list'
+import ChatBookUsage from '#models/chat_book_usage'
 import env from '#start/env'
 import { DateTime } from 'luxon'
 
@@ -95,6 +96,35 @@ export default class SubscriptionsController {
           savings: '15%',
         },
       },
+    })
+  }
+
+  /**
+   * @summary Get current user's chat usage per book
+   * @tag Subscriptions
+   * @description Returns chat usage statistics per book for the authenticated user
+   * @responseBody 200 - Chat usage statistics
+   * @responseBody 401 - Unauthorized
+   */
+  async chatUsage({ auth, response }: HttpContext) {
+    const user = await auth.authenticate()
+
+    const chatLimit = user.plan === 'plus' ? CHAT_LIMITS.PLUS : CHAT_LIMITS.FREE
+    const chatRequestsUsed = user.chatRequestsCount ?? 0
+    const chatRequestsRemaining = Math.max(0, chatLimit - chatRequestsUsed)
+
+    // Get per-book usage stats
+    const bookUsage = await ChatBookUsage.getUserUsageStats(user.id, user.chatRequestsResetAt)
+
+    return response.ok({
+      summary: {
+        limit: chatLimit,
+        used: chatRequestsUsed,
+        remaining: chatRequestsRemaining,
+        resetsAt: user.chatRequestsResetAt,
+        plan: user.plan,
+      },
+      books: bookUsage,
     })
   }
 

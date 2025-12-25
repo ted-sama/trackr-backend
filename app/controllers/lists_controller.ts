@@ -2,6 +2,7 @@ import Book from '#models/book'
 import List from '#models/list'
 import AppError from '#exceptions/app_error'
 import db from '@adonisjs/lucid/services/db'
+import NotificationService from '#services/notification_service'
 import {
   addBookSchema,
   createSchema,
@@ -698,6 +699,17 @@ export default class ListsController {
 
     await list.related('likedBy').attach([user.id])
 
+    // Create notification for the list owner
+    if (list.userId) {
+      await NotificationService.create({
+        userId: list.userId,
+        actorId: user.id,
+        type: 'list_like',
+        resourceType: 'list',
+        resourceId: list.id,
+      })
+    }
+
     return response.ok({
       message: 'List liked successfully',
     })
@@ -733,6 +745,17 @@ export default class ListsController {
     }
 
     await list.related('likedBy').detach([user.id])
+
+    // Delete the notification
+    if (list.userId) {
+      await NotificationService.delete({
+        userId: list.userId,
+        actorId: user.id,
+        type: 'list_like',
+        resourceType: 'list',
+        resourceId: list.id,
+      })
+    }
 
     return response.noContent()
   }
@@ -783,6 +806,17 @@ export default class ListsController {
 
     await list.related('savedBy').attach([user.id])
 
+    // Create notification for the list owner
+    if (list.userId) {
+      await NotificationService.create({
+        userId: list.userId,
+        actorId: user.id,
+        type: 'list_save',
+        resourceType: 'list',
+        resourceId: list.id,
+      })
+    }
+
     return response.ok({
       message: 'List saved successfully',
     })
@@ -818,6 +852,17 @@ export default class ListsController {
     }
 
     await list.related('savedBy').detach([user.id])
+
+    // Delete the notification
+    if (list.userId) {
+      await NotificationService.delete({
+        userId: list.userId,
+        actorId: user.id,
+        type: 'list_save',
+        resourceType: 'list',
+        resourceId: list.id,
+      })
+    }
 
     return response.noContent()
   }

@@ -5,6 +5,7 @@ import User from '#models/user'
 import BookTracking from '#models/book_tracking'
 import AppError from '#exceptions/app_error'
 import { ActivityLogger } from '#services/activity_logger'
+import NotificationService from '#services/notification_service'
 import {
   createReviewSchema,
   updateReviewSchema,
@@ -454,6 +455,15 @@ export default class ReviewsController {
     // Increment likes count without updating updatedAt
     await BookReview.query().where('id', id).increment('likes_count', 1)
 
+    // Create notification for the review author
+    await NotificationService.create({
+      userId: review.userId,
+      actorId: user.id,
+      type: 'review_like',
+      resourceType: 'book_review',
+      resourceId: review.id,
+    })
+
     return response.ok({ message: 'Review liked successfully' })
   }
 
@@ -495,6 +505,15 @@ export default class ReviewsController {
       .where('id', id)
       .where('likes_count', '>', 0)
       .decrement('likes_count', 1)
+
+    // Delete the notification
+    await NotificationService.delete({
+      userId: review.userId,
+      actorId: user.id,
+      type: 'review_like',
+      resourceType: 'book_review',
+      resourceId: review.id,
+    })
 
     return response.ok({ message: 'Review unliked successfully' })
   }
