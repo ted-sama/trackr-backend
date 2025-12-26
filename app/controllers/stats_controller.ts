@@ -269,6 +269,7 @@ export default class StatsController {
     // Preferred reading days/hours based on activity
     // Heatmap data: day (0-6), hour (0-23), count
     // Convert timestamps to user's local timezone before extracting day/hour
+    // Only count actual reading activity (chapter/volume updates)
 
     const heatmap = await db.rawQuery(
       `
@@ -278,7 +279,7 @@ export default class StatsController {
         COUNT(*) as count
       FROM activity_logs
       WHERE user_id = ?
-      AND action LIKE 'book.%'
+      AND (action = 'book.currentChapterUpdated' OR action = 'book.currentVolumeUpdated')
       GROUP BY day, hour
       ORDER BY day, hour
     `,
