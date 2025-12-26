@@ -39,7 +39,7 @@ export default class NotificationService {
       )
 
       // Send push notification only if user wants it (check preferences)
-      this.sendPushNotificationIfAllowed(data).catch((err) => {
+      this.sendPushNotificationIfAllowed(data, notification.id).catch((err) => {
         console.error('Failed to send push notification:', err)
       })
 
@@ -53,7 +53,10 @@ export default class NotificationService {
   /**
    * Sends push notification only if user has enabled this notification type
    */
-  private static async sendPushNotificationIfAllowed(data: CreateNotificationData): Promise<void> {
+  private static async sendPushNotificationIfAllowed(
+    data: CreateNotificationData,
+    notificationId: string
+  ): Promise<void> {
     const recipient = await User.find(data.userId)
     if (!recipient) {
       return
@@ -65,7 +68,7 @@ export default class NotificationService {
       return
     }
 
-    await this.sendPushNotification(data)
+    await this.sendPushNotification(data, notificationId)
   }
 
   /**
@@ -87,7 +90,10 @@ export default class NotificationService {
   /**
    * Sends a push notification for the given notification data
    */
-  private static async sendPushNotification(data: CreateNotificationData): Promise<void> {
+  private static async sendPushNotification(
+    data: CreateNotificationData,
+    notificationId: string
+  ): Promise<void> {
     const actor = await User.find(data.actorId)
     if (!actor) return
 
@@ -133,6 +139,7 @@ export default class NotificationService {
       title: 'Trackr',
       body,
       data: {
+        notificationId,
         type: data.type,
         resourceType: data.resourceType,
         resourceId: data.resourceId.toString(),
