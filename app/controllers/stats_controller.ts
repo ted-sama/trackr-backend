@@ -3,8 +3,7 @@ import db from '@adonisjs/lucid/services/db'
 import BookTracking from '#models/book_tracking'
 import User from '#models/user'
 import AppError from '#exceptions/app_error'
-// import ActivityLog from '#models/activity_log'
-// import Book from '#models/book'
+import Book from '#models/book'
 
 export default class StatsController {
   /**
@@ -126,6 +125,162 @@ export default class StatsController {
       series,
       authors,
       funnel,
+    })
+  }
+
+  /**
+   * @summary Get books filtered by stats category (current user)
+   * @description Returns books filtered by genre, type, rating, series length, or author
+   */
+  async getFilteredBooks({ auth, request, response }: HttpContext) {
+    const user = await auth.authenticate()
+
+    if (user.plan !== 'plus') {
+      throw new AppError('Stats are only available for Trackr Plus subscribers', {
+        status: 403,
+        code: 'STATS_PLUS_REQUIRED',
+      })
+    }
+
+    const chartType = request.input('chartType') as string
+    const filterValue = request.input('filterValue') as string
+
+    if (!chartType || !filterValue) {
+      return response.badRequest({ message: 'chartType and filterValue are required' })
+    }
+
+    const books = await this.getBooksByFilter(user.id, chartType, filterValue)
+    return response.ok({ data: books })
+  }
+
+  /**
+   * @summary Get books filtered by stats category (any user)
+   * @description Returns books filtered by genre, type, rating, series length, or author for a specific user
+   */
+  async getFilteredBooksForUser({ auth, params, request, response }: HttpContext) {
+    const user = await User.findBy('username', params.username)
+    if (!user) {
+      return response.notFound({ message: 'User not found' })
+    }
+
+    const currentUser = await auth.check() ? auth.user : null
+    const isOwner = currentUser?.id === user.id
+
+    if (!user.isStatsPublic && !isOwner) {
+      throw new AppError('This user\'s statistics are private', {
+        status: 403,
+        code: 'STATS_PRIVATE',
+      })
+    }
+
+    if (user.plan !== 'plus') {
+      throw new AppError('This user does not have a Trackr Plus subscription', {
+        status: 403,
+        code: 'STATS_PLUS_REQUIRED',
+      })
+    }
+
+    const chartType = request.input('chartType') as string
+    const filterValue = request.input('filterValue') as string
+
+    if (!chartType || !filterValue) {
+      return response.badRequest({ message: 'chartType and filterValue are required' })
+    }
+
+    const books = await this.getBooksByFilter(user.id, chartType, filterValue)
+    return response.ok({ data: books })
+  }
+
+  private async getBooksByFilter(userId: string, chartType: string, filterValue: string): Promise<Book[]> {
+    // Helper to create a fresh query each time (Lucid queries are mutable)
+    const createBaseQuery = () => BookTracking.query()
+      .where('user_id', userId)
+      .preload('book', (bookQuery) => {
+        bookQuery.preload('authors').preload('publishers')
+      })
+
+    let trackings: BookTracking[]
+
+    switch (chartType) {
+      case 'genre':
+        // Filter by genre (genres is a JSON array in books table)
+        // Cast to jsonb since genres column is json type and @> operator requires jsonb
+        trackings = await createBaseQuery()
+          .whereHas('book', (bookQuery) => {
+            bookQuery.whereRaw('genres::jsonb @> ?::jsonb', [JSON.stringify([filterValue])])
+          })
+        break
+
+      case 'type':
+        // Filter by book type (manga, manhwa, etc.)
+        trackings = await createBaseQuery()
+          .whereHas('book', (bookQuery) => {
+            bookQuery.whereILike('type', filterValue)
+          })
+        break
+
+      case 'rating':
+        // Filter by user rating (exact match)
+        const ratingValue = parseFloat(filterValue)
+        trackings = await createBaseQuery()
+          .whereNotNull('rating')
+          .where('rating', ratingValue)
+        break
+
+      case 'series':
+        // Filter by series length category
+        trackings = await createBaseQuery()
+          .where('status', 'completed')
+          .whereHas('book', (bookQuery) => {
+            switch (filterValue) {
+              case 'oneshot':
+                bookQuery.where((q) => {
+                  q.where('chapters', 1).orWhere('volumes', 1)
+                })
+                break
+              case 'short':
+                bookQuery.where('chapters', '>=', 2).where('chapters', '<=', 49)
+                break
+              case 'medium':
+                bookQuery.where('chapters', '>=', 50).where('chapters', '<=', 500)
+                break
+              case 'long':
+                bookQuery.where('chapters', '>', 500)
+                break
+            }
+          })
+        break
+
+      case 'author':
+        // Filter by author name
+        trackings = await createBaseQuery()
+          .whereHas('book', (bookQuery) => {
+            bookQuery.whereHas('authors', (authorQuery) => {
+              authorQuery.whereILike('name', filterValue)
+            })
+          })
+        break
+
+      default:
+        trackings = []
+    }
+
+    // Extract books from trackings and add tracking info
+    return trackings.map((tracking) => {
+      const book = tracking.book
+      // Add tracking status to the book object for frontend display
+      return {
+        ...book.serialize(),
+        tracking: true,
+        trackingStatus: {
+          status: tracking.status,
+          currentChapter: tracking.currentChapter,
+          currentVolume: tracking.currentVolume,
+          rating: tracking.rating,
+          startDate: tracking.startDate,
+          finishDate: tracking.finishDate,
+        },
+      } as unknown as Book
     })
   }
 
