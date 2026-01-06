@@ -3,6 +3,7 @@ import Book from '#models/book'
 import AppError from '#exceptions/app_error'
 import db from '@adonisjs/lucid/services/db'
 import { aiTranslate } from '#helpers/ai_translate'
+import { DateTime } from 'luxon'
 
 export default class BooksController {
   /**
@@ -301,5 +302,80 @@ export default class BooksController {
 
     // Aucune donnée suffisante pour faire une recherche
     return response.ok([])
+  }
+
+  /**
+   * @summary Get popular books this month
+   * @tag Books
+   * @description Returns popular books based on user interactions this month (list additions, reviews, chapter reads)
+   * @paramQuery page - Page number for pagination - @type(number)
+   * @paramQuery limit - Number of items per page (max 50) - @type(number)
+   * @paramQuery nsfw - Include NSFW content - @type(boolean)
+   * @responseBody 200 - <Book[]>.paginated() - Popular books with pagination
+   */
+  async popular({ request, response }: HttpContext) {
+    const page = Math.max(1, request.input('page', 1))
+    const limit = Math.min(Math.max(1, request.input('limit', 20)), 50)
+    const offset = (page - 1) * limit
+    const nsfw =
+      request.input('nsfw', 'false') === 'true' || request.input('nsfw', 'false') === true
+
+    // Use a rolling 30-day window for popularity
+    const thirtyDaysAgo = DateTime.now().minus({ days: 30 }).toSQL()
+
+    // Subquery for popularity score (last 30 days)
+    const popularitySubquery = `
+      COALESCE((SELECT COUNT(DISTINCT lb.list_id)::int FROM list_books lb JOIN lists l ON l.id = lb.list_id WHERE lb.book_id = books.id AND lb.added_at >= ? AND l.is_my_library = false), 0) +
+      COALESCE((SELECT COUNT(*)::int FROM book_reviews br WHERE br.book_id = books.id AND br.created_at >= ?), 0) +
+      COALESCE((SELECT COUNT(*)::int FROM book_tracking bt WHERE bt.book_id = books.id AND bt.created_at >= ?), 0)
+    `
+
+    // Count total books with interactions in the last 30 days
+    const countResult = await db.rawQuery(
+      `SELECT COUNT(*) as count FROM books WHERE ${!nsfw ? 'nsfw = false AND' : ''} (${popularitySubquery}) > 0`,
+      [thirtyDaysAgo, thirtyDaysAgo, thirtyDaysAgo]
+    )
+    const total = Number.parseInt(
+      (countResult.rows as Array<{ count: string }>)[0]?.count || '0',
+      10
+    )
+
+    // Get only books with recent interactions, ordered by popularity score
+    const books = await Book.query()
+      .select('books.*')
+      .select(
+        db.raw(`(${popularitySubquery}) AS popularity_score`, [
+          thirtyDaysAgo,
+          thirtyDaysAgo,
+          thirtyDaysAgo,
+        ])
+      )
+      .whereRaw(`(${popularitySubquery}) > 0`, [thirtyDaysAgo, thirtyDaysAgo, thirtyDaysAgo])
+      .if(!nsfw, (q) => q.where('nsfw', false))
+      .preload('authors')
+      .preload('publishers')
+      .orderByRaw(
+        `(${popularitySubquery}) DESC, rating_count DESC NULLS LAST, rating DESC NULLS LAST`,
+        [thirtyDaysAgo, thirtyDaysAgo, thirtyDaysAgo]
+      )
+      .limit(limit)
+      .offset(offset)
+
+    // Build pagination response
+    const lastPage = Math.max(1, Math.ceil(total / limit))
+    return response.ok({
+      meta: {
+        total,
+        perPage: limit,
+        currentPage: page,
+        lastPage,
+        firstPage: 1,
+        firstPageUrl: '/?page=1',
+        lastPageUrl: `/?page=${lastPage}`,
+        nextPageUrl: page < lastPage ? `/?page=${page + 1}` : null,
+        previousPageUrl: page > 1 ? `/?page=${page - 1}` : null,
+      },
+      data: books,
+    })
   }
 }

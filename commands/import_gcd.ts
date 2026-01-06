@@ -160,18 +160,21 @@ export default class ImportGcd extends BaseCommand {
         s.issue_count,
         s.publisher_id
       FROM gcd_series s
-      LEFT JOIN gcd_series_publication_type pt ON s.publication_type_id = pt.id
       WHERE s.deleted = 0
         AND s.is_comics_publication = 1
         AND s.year_began >= 1980
         AND s.issue_count > 1
         AND s.publisher_id IN (${this.allowedPublishers.join(',')})
-        -- Only keep ongoing series, was ongoing series, and one-shots
+        -- Only keep original series (ongoing, limited, miniseries, one-shots)
+        -- This filters out trade paperbacks, hardcovers, collected editions, etc.
         AND (
-          LOWER(pt.name) LIKE '%ongoing series%'
-          OR LOWER(pt.name) LIKE '%one shot%'
-          OR LOWER(pt.name) LIKE '%one-shot%'
-          OR LOWER(pt.name) LIKE '%oneshot%'
+          LOWER(s.publishing_format) LIKE '%ongoing%'
+          OR LOWER(s.publishing_format) LIKE '%one-shot%'
+          OR LOWER(s.publishing_format) LIKE '%one shot%'
+          OR LOWER(s.publishing_format) LIKE '%oneshot%'
+          OR LOWER(s.publishing_format) LIKE '%limited series%'
+          OR LOWER(s.publishing_format) LIKE '%miniseries%'
+          OR LOWER(s.publishing_format) LIKE '%mini-series%'
         )
         -- Exclude compilations/reprints
         AND s.name NOT LIKE '%Masterwork%'

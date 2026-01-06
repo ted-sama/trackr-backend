@@ -96,6 +96,7 @@ router
   .group(() => {
     router.get('/', [BooksController, 'index'])
     router.get('/search', [BooksController, 'search'])
+    router.get('/popular', [BooksController, 'popular'])
     router.get('/:id', [BooksController, 'show'])
     router.get('/:id/same', [BooksController, 'getBySame'])
     router.get('/:id/recap/:chapterId', [RecapController, 'recap'])
