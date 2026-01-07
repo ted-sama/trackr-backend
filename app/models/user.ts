@@ -30,6 +30,7 @@ export interface NotificationPreferences {
 export interface PrivacyPreferences {
   statsPublic?: boolean
   activityPublic?: boolean
+  libraryPublic?: boolean
 }
 
 export interface UserPreferences {
@@ -211,6 +212,11 @@ export default class User extends compose(BaseModel, AuthFinder) {
     return this.preferences?.privacy?.activityPublic ?? true
   }
 
+  @computed()
+  get isLibraryPublic(): boolean {
+    return this.preferences?.privacy?.libraryPublic ?? true
+  }
+
   /**
    * Get all privacy preferences
    */
@@ -218,6 +224,7 @@ export default class User extends compose(BaseModel, AuthFinder) {
     return {
       statsPublic: this.isStatsPublic,
       activityPublic: this.isActivityPublic,
+      libraryPublic: this.isLibraryPublic,
     }
   }
 

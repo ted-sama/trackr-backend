@@ -98,6 +98,7 @@ export default class UsersController {
           'backdropImage',
           'isStatsPublic',
           'isActivityPublic',
+          'isLibraryPublic',
           'createdAt',
         ],
       },
@@ -211,7 +212,7 @@ export default class UsersController {
 
   async update({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
-    const { username, displayName, backdropMode, backdropColor, isStatsPublic, isActivityPublic } =
+    const { username, displayName, backdropMode, backdropColor, isStatsPublic, isActivityPublic, isLibraryPublic } =
       await request.validateUsing(updateSchema)
 
     if (username && username !== user.username) {
@@ -245,10 +246,11 @@ export default class UsersController {
     }
 
     // Update privacy preferences if provided
-    if (isStatsPublic !== undefined || isActivityPublic !== undefined) {
+    if (isStatsPublic !== undefined || isActivityPublic !== undefined || isLibraryPublic !== undefined) {
       const privacyUpdates: Record<string, boolean> = {}
       if (isStatsPublic !== undefined) privacyUpdates.statsPublic = isStatsPublic
       if (isActivityPublic !== undefined) privacyUpdates.activityPublic = isActivityPublic
+      if (isLibraryPublic !== undefined) privacyUpdates.libraryPublic = isLibraryPublic
       user.setPrivacyPreferences(privacyUpdates)
     }
 

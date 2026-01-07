@@ -16,6 +16,7 @@ export const updateSchema = vine.compile(
     backdropColor: vine.string().trim().optional(),
     isStatsPublic: vine.boolean().optional(),
     isActivityPublic: vine.boolean().optional(),
+    isLibraryPublic: vine.boolean().optional(),
   })
 )
 

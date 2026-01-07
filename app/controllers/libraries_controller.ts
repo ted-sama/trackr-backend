@@ -47,12 +47,25 @@ export default class LibraryController {
    * @paramQuery page - Page number for pagination - @type(number)
    * @paramQuery limit - Number of items per page - @type(number)
    * @responseBody 200 - <BookTracking[]>.with(book).paginated() - User's library with book tracking
+   * @responseBody 403 - Library is private
    * @responseBody 404 - User not found
    */
-  async showUserBooks({ params, request, response }: HttpContext) {
+  async showUserBooks({ auth, params, request, response }: HttpContext) {
     const user = await User.findBy('username', params.username)
     if (!user) {
       return response.notFound({ message: 'User not found' })
+    }
+
+    // Check if current user is the owner (to allow viewing own private library)
+    const currentUser = (await auth.check()) ? auth.user : null
+    const isOwner = currentUser?.id === user.id
+
+    // Check if library is private and requester is not the owner
+    if (!user.isLibraryPublic && !isOwner) {
+      throw new AppError("This user's library is private", {
+        status: 403,
+        code: 'LIBRARY_PRIVATE',
+      })
     }
 
     const page = request.input('page', 1)
