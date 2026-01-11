@@ -108,6 +108,7 @@ export default class UsersController {
           'id',
           'username',
           'displayName',
+          'bio',
           'avatar',
           'plan',
           'backdropMode',
@@ -244,6 +245,7 @@ export default class UsersController {
     const {
       username,
       displayName,
+      bio,
       backdropMode,
       backdropColor,
       isStatsPublic,
@@ -310,6 +312,7 @@ export default class UsersController {
       .merge({
         username,
         displayName,
+        bio,
         backdropMode,
         backdropColor,
       })

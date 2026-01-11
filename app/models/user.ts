@@ -79,6 +79,9 @@ export default class User extends compose(BaseModel, AuthFinder) {
   declare displayName: string | null
 
   @column()
+  declare bio: string | null
+
+  @column()
   declare email: string
 
   @column({ serializeAs: null })
@@ -363,6 +366,26 @@ export default class User extends compose(BaseModel, AuthFinder) {
           )
         }
         user.displayName = displayNameCheck.content
+      }
+    }
+
+    // Validate and censor bio
+    if (user.$dirty.bio && user.bio) {
+      const bioCheck = ContentFilterService.validateAndCensor(user.bio, 'bio', {
+        autoReject: false,
+        autoCensor: true,
+      })
+      if (bioCheck.content !== user.bio) {
+        if (user.id) {
+          await ContentFilterService.logModeration(
+            user.id,
+            'bio',
+            user.bio,
+            bioCheck.content,
+            bioCheck.reason!
+          )
+        }
+        user.bio = bioCheck.content
       }
     }
   }

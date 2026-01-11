@@ -12,6 +12,7 @@ export const updateSchema = vine.compile(
   vine.object({
     username: vine.string().trim().optional(),
     displayName: vine.string().trim().optional(),
+    bio: vine.string().trim().maxLength(300).nullable().optional(),
     backdropMode: vine.string().trim().optional(),
     backdropColor: vine.string().trim().optional(),
     // Legacy boolean privacy fields

@@ -7,6 +7,7 @@ import User from '#models/user'
 export type ModerationResourceType =
   | 'username'
   | 'display_name'
+  | 'bio'
   | 'list_name'
   | 'list_description'
   | 'list_tags'
