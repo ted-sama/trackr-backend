@@ -141,27 +141,55 @@ export default class FollowService {
   }
 
   /**
-   * Get followers of a user with pagination
+   * Get followers of a user with pagination and optional search
    */
-  static async getFollowers(userId: string, page: number = 1, limit: number = 20) {
-    return User.query()
+  static async getFollowers(
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+    search?: string
+  ) {
+    const query = User.query()
       .whereIn('id', (subquery) => {
         subquery.from('user_follows').select('follower_id').where('following_id', userId)
       })
-      .orderBy('created_at', 'desc')
-      .paginate(page, limit)
+
+    if (search && search.trim()) {
+      const searchTerm = `%${search.trim().toLowerCase()}%`
+      query.where((builder) => {
+        builder
+          .whereILike('username', searchTerm)
+          .orWhereILike('display_name', searchTerm)
+      })
+    }
+
+    return query.orderBy('created_at', 'desc').paginate(page, limit)
   }
 
   /**
-   * Get users that a user is following with pagination
+   * Get users that a user is following with pagination and optional search
    */
-  static async getFollowing(userId: string, page: number = 1, limit: number = 20) {
-    return User.query()
+  static async getFollowing(
+    userId: string,
+    page: number = 1,
+    limit: number = 20,
+    search?: string
+  ) {
+    const query = User.query()
       .whereIn('id', (subquery) => {
         subquery.from('user_follows').select('following_id').where('follower_id', userId)
       })
-      .orderBy('created_at', 'desc')
-      .paginate(page, limit)
+
+    if (search && search.trim()) {
+      const searchTerm = `%${search.trim().toLowerCase()}%`
+      query.where((builder) => {
+        builder
+          .whereILike('username', searchTerm)
+          .orWhereILike('display_name', searchTerm)
+      })
+    }
+
+    return query.orderBy('created_at', 'desc').paginate(page, limit)
   }
 
   /**

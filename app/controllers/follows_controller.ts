@@ -75,6 +75,7 @@ export default class FollowsController {
    * @description Get paginated list of users who follow the specified user
    * @paramQuery page - Page number for pagination - @type(number)
    * @paramQuery limit - Number of items per page (max 50) - @type(number)
+   * @paramQuery q - Search query to filter by username or display name - @type(string)
    * @responseBody 200 - <User[]>.paginated()
    * @responseBody 404 - User not found
    */
@@ -82,6 +83,7 @@ export default class FollowsController {
     const { username } = params
     const page = request.input('page', 1)
     const limit = Math.min(request.input('limit', 20), 50)
+    const search = request.input('q')
 
     const targetUser = await User.findBy('username', username)
 
@@ -93,7 +95,7 @@ export default class FollowsController {
     }
 
     const currentUser = (await auth.check()) ? auth.user : null
-    const followers = await FollowService.getFollowers(targetUser.id, page, limit)
+    const followers = await FollowService.getFollowers(targetUser.id, page, limit, search)
 
     // Enrich with relationship data if authenticated
     const serialized = followers.serialize({
@@ -121,6 +123,7 @@ export default class FollowsController {
    * @description Get paginated list of users that the specified user follows
    * @paramQuery page - Page number for pagination - @type(number)
    * @paramQuery limit - Number of items per page (max 50) - @type(number)
+   * @paramQuery q - Search query to filter by username or display name - @type(string)
    * @responseBody 200 - <User[]>.paginated()
    * @responseBody 404 - User not found
    */
@@ -128,6 +131,7 @@ export default class FollowsController {
     const { username } = params
     const page = request.input('page', 1)
     const limit = Math.min(request.input('limit', 20), 50)
+    const search = request.input('q')
 
     const targetUser = await User.findBy('username', username)
 
@@ -139,7 +143,7 @@ export default class FollowsController {
     }
 
     const currentUser = (await auth.check()) ? auth.user : null
-    const following = await FollowService.getFollowing(targetUser.id, page, limit)
+    const following = await FollowService.getFollowing(targetUser.id, page, limit, search)
 
     const serialized = following.serialize({
       fields: {
