@@ -4,6 +4,7 @@ import AppError from '#exceptions/app_error'
 import db from '@adonisjs/lucid/services/db'
 import { aiTranslate } from '#helpers/ai_translate'
 import { DateTime } from 'luxon'
+import FeedService from '#services/feed_service'
 
 export default class BooksController {
   /**
@@ -302,6 +303,38 @@ export default class BooksController {
 
     // Aucune donnée suffisante pour faire une recherche
     return response.ok([])
+  }
+
+  /**
+   * @summary Get users the current user follows who have read this book
+   * @tag Books
+   * @description Returns a list of followed users who have this book in their tracking
+   * @paramPath id - Book ID - @type(number) @required
+   * @paramQuery limit - Number of items to return (max 50) - @type(number)
+   * @responseBody 200 - { readers: BookReaderItem[], total: number } - List of readers among following
+   * @responseBody 401 - Unauthorized
+   * @responseBody 404 - Book not found
+   */
+  async getReaders({ params, request, auth, response }: HttpContext) {
+    const currentUser = await auth.authenticate()
+    const limit = Math.min(Math.max(1, request.input('limit', 20)), 50)
+
+    // Check if book exists
+    const bookExists = await Book.query().where('id', params.id).first()
+    if (!bookExists) {
+      throw new AppError('Book not found', {
+        status: 404,
+        code: 'BOOK_NOT_FOUND',
+      })
+    }
+
+    const result = await FeedService.getBookReadersByFollowing(
+      currentUser.id,
+      Number.parseInt(params.id),
+      limit
+    )
+
+    return response.ok(result)
   }
 
   /**

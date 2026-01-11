@@ -12,6 +12,22 @@ export interface RecentlyRatedUser {
   avatar: string | null
 }
 
+export interface BookReaderUser {
+  id: string
+  username: string
+  displayName: string | null
+  avatar: string | null
+  plan: 'free' | 'plus'
+}
+
+export interface BookReaderItem {
+  user: BookReaderUser
+  status: 'reading' | 'completed' | 'on_hold' | 'dropped' | 'plan_to_read'
+  rating: number | null
+  hasReview: boolean
+  reviewId: number | null
+}
+
 export interface RecentlyRatedItem {
   book: Book
   user: RecentlyRatedUser
@@ -176,5 +192,93 @@ export default class FeedService {
     }
 
     return result
+  }
+
+  /**
+   * Get users that the current user follows who have read a specific book
+   * Returns followers who have the book in their tracking with any status
+   */
+  static async getBookReadersByFollowing(
+    userId: string,
+    bookId: number,
+    limit: number = 20
+  ): Promise<{ readers: BookReaderItem[]; total: number }> {
+    // Get list of user IDs that the current user follows
+    const followingIds = await FollowService.getFollowingIds(userId)
+
+    if (followingIds.length === 0) {
+      return { readers: [], total: 0 }
+    }
+
+    // Count total readers among following
+    const countResult = await db
+      .from('book_tracking')
+      .count('* as count')
+      .where('book_id', bookId)
+      .whereIn('user_id', followingIds)
+      .first()
+
+    const total = Number(countResult?.count ?? 0)
+
+    if (total === 0) {
+      return { readers: [], total: 0 }
+    }
+
+    // Get book trackings from followed users for this specific book
+    // Order by: completed first, then by rating (highest first), then by username
+    const trackings = await BookTracking.query()
+      .where('book_id', bookId)
+      .whereIn('user_id', followingIds)
+      .orderByRaw(`
+        CASE status
+          WHEN 'completed' THEN 1
+          WHEN 'reading' THEN 2
+          WHEN 'on_hold' THEN 3
+          WHEN 'dropped' THEN 4
+          WHEN 'plan_to_read' THEN 5
+        END ASC
+      `)
+      .orderByRaw('rating DESC NULLS LAST')
+      .limit(limit)
+      .preload('user')
+
+    if (trackings.length === 0) {
+      return { readers: [], total }
+    }
+
+    // Get review IDs for these book/user combinations
+    const userIds = trackings.map((t) => t.userId)
+
+    const reviews = await BookReview.query()
+      .where('book_id', bookId)
+      .whereIn('user_id', userIds)
+      .select('id', 'user_id')
+
+    // Create a map for quick review lookup
+    const reviewMap = new Map<string, number>()
+    for (const review of reviews) {
+      reviewMap.set(review.userId, review.id)
+    }
+
+    // Build the result
+    const readers: BookReaderItem[] = trackings.map((tracking) => {
+      const reviewId = reviewMap.get(tracking.userId) ?? null
+
+      return {
+        user: {
+          id: tracking.user.id,
+          username: tracking.user.username,
+          displayName: tracking.user.displayName,
+          avatar: tracking.user.avatar,
+          plan: tracking.user.plan,
+        },
+        status: tracking.status,
+        rating: tracking.rating,
+        hasReview: reviewId !== null,
+        reviewId,
+      }
+    })
+
+    return { readers, total }
   }
 }

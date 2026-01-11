@@ -107,6 +107,7 @@ router
     router.get('/popular', [BooksController, 'popular'])
     router.get('/:id', [BooksController, 'show'])
     router.get('/:id/same', [BooksController, 'getBySame'])
+    router.get('/:id/readers', [BooksController, 'getReaders'])
     router.get('/:id/recap/:chapterId', [RecapController, 'recap'])
     router.get('/:bookId/reviews', [ReviewsController, 'index'])
     router.get('/:bookId/reviews/me', [ReviewsController, 'myReview'])
