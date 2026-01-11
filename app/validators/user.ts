@@ -23,6 +23,7 @@ export const updateSchema = vine.compile(
     statsVisibility: vine.enum(['public', 'followers', 'friends', 'private'] as const).optional(),
     activityVisibility: vine.enum(['public', 'followers', 'friends', 'private'] as const).optional(),
     libraryVisibility: vine.enum(['public', 'followers', 'friends', 'private'] as const).optional(),
+    connectionsVisibility: vine.enum(['public', 'followers', 'friends', 'private'] as const).optional(),
   })
 )
 

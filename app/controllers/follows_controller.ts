@@ -78,6 +78,7 @@ export default class FollowsController {
    * @paramQuery q - Search query to filter by username or display name - @type(string)
    * @responseBody 200 - <User[]>.paginated()
    * @responseBody 404 - User not found
+   * @responseBody 403 - Access denied (connections are private)
    */
   async getFollowers({ auth, params, request, response }: HttpContext) {
     const { username } = params
@@ -95,6 +96,21 @@ export default class FollowsController {
     }
 
     const currentUser = (await auth.check()) ? auth.user : null
+
+    // Check if current user can view connections
+    const canView = await FollowService.canViewContent(
+      currentUser?.id ?? null,
+      targetUser.id,
+      targetUser.connectionsVisibility
+    )
+
+    if (!canView) {
+      throw new AppError('You do not have permission to view this user\'s connections', {
+        status: 403,
+        code: 'CONNECTIONS_PRIVATE',
+      })
+    }
+
     const followers = await FollowService.getFollowers(targetUser.id, page, limit, search)
 
     // Enrich with relationship data if authenticated
@@ -126,6 +142,7 @@ export default class FollowsController {
    * @paramQuery q - Search query to filter by username or display name - @type(string)
    * @responseBody 200 - <User[]>.paginated()
    * @responseBody 404 - User not found
+   * @responseBody 403 - Access denied (connections are private)
    */
   async getFollowing({ auth, params, request, response }: HttpContext) {
     const { username } = params
@@ -143,6 +160,21 @@ export default class FollowsController {
     }
 
     const currentUser = (await auth.check()) ? auth.user : null
+
+    // Check if current user can view connections
+    const canView = await FollowService.canViewContent(
+      currentUser?.id ?? null,
+      targetUser.id,
+      targetUser.connectionsVisibility
+    )
+
+    if (!canView) {
+      throw new AppError('You do not have permission to view this user\'s connections', {
+        status: 403,
+        code: 'CONNECTIONS_PRIVATE',
+      })
+    }
+
     const following = await FollowService.getFollowing(targetUser.id, page, limit, search)
 
     const serialized = following.serialize({

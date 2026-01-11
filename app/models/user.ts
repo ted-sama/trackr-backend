@@ -40,6 +40,7 @@ export interface PrivacyPreferences {
   statsVisibility?: VisibilityLevel
   activityVisibility?: VisibilityLevel
   libraryVisibility?: VisibilityLevel
+  connectionsVisibility?: VisibilityLevel
 }
 
 export interface UserPreferences {
@@ -287,6 +288,11 @@ export default class User extends compose(BaseModel, AuthFinder) {
     return this.isLibraryPublic ? 'public' : 'private'
   }
 
+  @computed()
+  get connectionsVisibility(): VisibilityLevel {
+    return this.preferences?.privacy?.connectionsVisibility ?? 'public'
+  }
+
   /**
    * Get all privacy preferences (returns both legacy and new format)
    */
@@ -300,6 +306,7 @@ export default class User extends compose(BaseModel, AuthFinder) {
       statsVisibility: this.statsVisibility,
       activityVisibility: this.activityVisibility,
       libraryVisibility: this.libraryVisibility,
+      connectionsVisibility: this.connectionsVisibility,
     }
   }
 

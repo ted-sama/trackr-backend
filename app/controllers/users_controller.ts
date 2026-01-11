@@ -131,6 +131,7 @@ export default class UsersController {
     user.statsVisibility = userRecord.statsVisibility
     user.activityVisibility = userRecord.activityVisibility
     user.libraryVisibility = userRecord.libraryVisibility
+    user.connectionsVisibility = userRecord.connectionsVisibility
 
     // Add relationship info if authenticated
     const currentUser = (await auth.check()) ? auth.user : null
@@ -254,6 +255,7 @@ export default class UsersController {
       statsVisibility,
       activityVisibility,
       libraryVisibility,
+      connectionsVisibility,
     } = await request.validateUsing(updateSchema)
 
     if (username && username !== user.username) {
@@ -290,7 +292,10 @@ export default class UsersController {
     const hasLegacyUpdates =
       isStatsPublic !== undefined || isActivityPublic !== undefined || isLibraryPublic !== undefined
     const hasGranularUpdates =
-      statsVisibility !== undefined || activityVisibility !== undefined || libraryVisibility !== undefined
+      statsVisibility !== undefined ||
+      activityVisibility !== undefined ||
+      libraryVisibility !== undefined ||
+      connectionsVisibility !== undefined
 
     if (hasLegacyUpdates || hasGranularUpdates) {
       const privacyUpdates: Record<string, boolean | string> = {}
@@ -304,6 +309,7 @@ export default class UsersController {
       if (statsVisibility !== undefined) privacyUpdates.statsVisibility = statsVisibility
       if (activityVisibility !== undefined) privacyUpdates.activityVisibility = activityVisibility
       if (libraryVisibility !== undefined) privacyUpdates.libraryVisibility = libraryVisibility
+      if (connectionsVisibility !== undefined) privacyUpdates.connectionsVisibility = connectionsVisibility
 
       user.setPrivacyPreferences(privacyUpdates)
     }
