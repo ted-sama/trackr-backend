@@ -82,6 +82,10 @@ export default class NotificationService {
         return user.notifyListLikes
       case 'list_save':
         return user.notifyListSaves
+      case 'new_follower':
+        return user.notifyNewFollower
+      case 'new_friend':
+        return user.notifyNewFriend
       default:
         return true
     }
@@ -130,6 +134,12 @@ export default class NotificationService {
         body = resourceName
           ? `${actorName} saved your list ${resourceName}`
           : `${actorName} saved your list`
+        break
+      case 'new_follower':
+        body = `${actorName} started following you`
+        break
+      case 'new_friend':
+        body = `You and ${actorName} are now friends!`
         break
       default:
         body = `${actorName} interacted with your content`

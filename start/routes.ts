@@ -22,6 +22,8 @@ const ReportsController = () => import('#controllers/reports_controller')
 const ReviewsController = () => import('#controllers/reviews_controller')
 const NotificationsController = () => import('#controllers/notifications_controller')
 const GenresController = () => import('#controllers/genres_controller')
+const FollowsController = () => import('#controllers/follows_controller')
+const FeedController = () => import('#controllers/feed_controller')
 
 import AutoSwagger from 'adonis-autoswagger'
 import swagger from '#config/swagger'
@@ -75,6 +77,8 @@ router
     router.post('/push-token', [UsersController, 'registerPushToken'])
     router.get('/notification-settings', [UsersController, 'getNotificationSettings'])
     router.patch('/notification-settings', [UsersController, 'updateNotificationSettings'])
+    router.get('/followers', [FollowsController, 'getMyFollowers'])
+    router.get('/following', [FollowsController, 'getMyFollowing'])
   })
   .prefix('me')
 
@@ -89,6 +93,10 @@ router
     router.get('/:username/stats/books', [StatsController, 'getFilteredBooksForUser'])
     router.get('/:username/books', [LibraryController, 'showUserBooks'])
     router.get('/:username/reviews', [ReviewsController, 'userReviews'])
+    router.post('/:username/follow', [FollowsController, 'follow'])
+    router.delete('/:username/follow', [FollowsController, 'unfollow'])
+    router.get('/:username/followers', [FollowsController, 'getFollowers'])
+    router.get('/:username/following', [FollowsController, 'getFollowing'])
   })
   .prefix('users')
 
@@ -169,6 +177,14 @@ router
     router.get('/translations', [GenresController, 'translations'])
   })
   .prefix('genres')
+
+// Feed (personalized content based on following)
+router
+  .group(() => {
+    router.get('/popular-among-following', [FeedController, 'popularAmongFollowing'])
+    router.get('/recently-rated', [FeedController, 'recentlyRated'])
+  })
+  .prefix('feed')
 
 // Webhooks (no auth required - verified via webhook secret)
 router

@@ -14,9 +14,14 @@ export const updateSchema = vine.compile(
     displayName: vine.string().trim().optional(),
     backdropMode: vine.string().trim().optional(),
     backdropColor: vine.string().trim().optional(),
+    // Legacy boolean privacy fields
     isStatsPublic: vine.boolean().optional(),
     isActivityPublic: vine.boolean().optional(),
     isLibraryPublic: vine.boolean().optional(),
+    // New granular visibility fields
+    statsVisibility: vine.enum(['public', 'followers', 'friends', 'private'] as const).optional(),
+    activityVisibility: vine.enum(['public', 'followers', 'friends', 'private'] as const).optional(),
+    libraryVisibility: vine.enum(['public', 'followers', 'friends', 'private'] as const).optional(),
   })
 )
 

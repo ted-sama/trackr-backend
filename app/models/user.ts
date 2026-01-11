@@ -25,12 +25,21 @@ export interface NotificationPreferences {
   reviewLikes?: boolean
   listLikes?: boolean
   listSaves?: boolean
+  newFollower?: boolean
+  newFriend?: boolean
 }
 
+export type VisibilityLevel = 'public' | 'followers' | 'friends' | 'private'
+
 export interface PrivacyPreferences {
+  // Legacy boolean fields (for backward compatibility)
   statsPublic?: boolean
   activityPublic?: boolean
   libraryPublic?: boolean
+  // New granular visibility fields
+  statsVisibility?: VisibilityLevel
+  activityVisibility?: VisibilityLevel
+  libraryVisibility?: VisibilityLevel
 }
 
 export interface UserPreferences {
@@ -146,6 +155,24 @@ export default class User extends compose(BaseModel, AuthFinder) {
   })
   declare topBooks: ManyToMany<typeof Book>
 
+  @manyToMany(() => User, {
+    pivotTable: 'user_follows',
+    pivotForeignKey: 'follower_id',
+    pivotRelatedForeignKey: 'following_id',
+    pivotTimestamps: { createdAt: 'created_at', updatedAt: false },
+    serializeAs: null,
+  })
+  declare following: ManyToMany<typeof User>
+
+  @manyToMany(() => User, {
+    pivotTable: 'user_follows',
+    pivotForeignKey: 'following_id',
+    pivotRelatedForeignKey: 'follower_id',
+    pivotTimestamps: { createdAt: 'created_at', updatedAt: false },
+    serializeAs: null,
+  })
+  declare followers: ManyToMany<typeof User>
+
   static accessTokens = DbAccessTokensProvider.forModel(User, {
     expiresIn: '30 days',
     prefix: 'trk_',
@@ -175,6 +202,14 @@ export default class User extends compose(BaseModel, AuthFinder) {
     return this.preferences?.notifications?.listSaves ?? true
   }
 
+  get notifyNewFollower(): boolean {
+    return this.preferences?.notifications?.newFollower ?? true
+  }
+
+  get notifyNewFriend(): boolean {
+    return this.preferences?.notifications?.newFriend ?? true
+  }
+
   /**
    * Get all notification preferences
    */
@@ -183,6 +218,8 @@ export default class User extends compose(BaseModel, AuthFinder) {
       reviewLikes: this.notifyReviewLikes,
       listLikes: this.notifyListLikes,
       listSaves: this.notifyListSaves,
+      newFollower: this.notifyNewFollower,
+      newFriend: this.notifyNewFriend,
     }
   }
 
@@ -201,6 +238,7 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
   /**
    * Privacy preferences helpers (default to true if not set)
+   * Legacy boolean getters for backward compatibility
    */
   @computed()
   get isStatsPublic(): boolean {
@@ -218,13 +256,47 @@ export default class User extends compose(BaseModel, AuthFinder) {
   }
 
   /**
-   * Get all privacy preferences
+   * New granular visibility getters with backward compatibility
+   * Falls back to legacy boolean fields if new fields not set
+   */
+  @computed()
+  get statsVisibility(): VisibilityLevel {
+    if (this.preferences?.privacy?.statsVisibility) {
+      return this.preferences.privacy.statsVisibility
+    }
+    // Backward compatibility: convert boolean to visibility level
+    return this.isStatsPublic ? 'public' : 'private'
+  }
+
+  @computed()
+  get activityVisibility(): VisibilityLevel {
+    if (this.preferences?.privacy?.activityVisibility) {
+      return this.preferences.privacy.activityVisibility
+    }
+    return this.isActivityPublic ? 'public' : 'private'
+  }
+
+  @computed()
+  get libraryVisibility(): VisibilityLevel {
+    if (this.preferences?.privacy?.libraryVisibility) {
+      return this.preferences.privacy.libraryVisibility
+    }
+    return this.isLibraryPublic ? 'public' : 'private'
+  }
+
+  /**
+   * Get all privacy preferences (returns both legacy and new format)
    */
   getPrivacyPreferences(): PrivacyPreferences {
     return {
+      // Legacy format for backward compatibility
       statsPublic: this.isStatsPublic,
       activityPublic: this.isActivityPublic,
       libraryPublic: this.isLibraryPublic,
+      // New granular format
+      statsVisibility: this.statsVisibility,
+      activityVisibility: this.activityVisibility,
+      libraryVisibility: this.libraryVisibility,
     }
   }
 

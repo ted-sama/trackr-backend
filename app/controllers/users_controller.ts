@@ -14,6 +14,7 @@ import db from '@adonisjs/lucid/services/db'
 import AppError from '#exceptions/app_error'
 import ActivityLog from '#models/activity_log'
 import { ActivityLogEnricher } from '#services/activity_log_enricher'
+import FollowService from '#services/follow_service'
 
 function enrichListWithUserContext(list: any, lists: List[], userId: string | null) {
   const listModel = lists.find((l) => l.id === list.id)
@@ -37,7 +38,15 @@ export default class UsersController {
    */
   async me({ auth, response }: HttpContext) {
     const user = await auth.authenticate()
-    return response.ok(user)
+
+    // Get follow counts
+    const counts = await FollowService.getCounts(user.id)
+
+    const userData = user.serialize()
+    userData.followersCount = counts.followersCount
+    userData.followingCount = counts.followingCount
+
+    return response.ok(userData)
   }
 
   /**
@@ -81,11 +90,19 @@ export default class UsersController {
     return response.ok(users)
   }
 
-  async show({ request, response }: HttpContext) {
+  async show({ auth, request, response }: HttpContext) {
     const { params } = await request.validateUsing(showSchema)
     const { username } = params
     const userRecord = await User.query().where('username', username).first()
-    const user = userRecord?.serialize({
+
+    if (!userRecord) {
+      throw new AppError('User not found', {
+        status: 404,
+        code: 'USER_NOT_FOUND',
+      })
+    }
+
+    const user = userRecord.serialize({
       fields: {
         pick: [
           'id',
@@ -104,11 +121,23 @@ export default class UsersController {
       },
     })
 
-    if (!user) {
-      throw new AppError('User not found', {
-        status: 404,
-        code: 'USER_NOT_FOUND',
-      })
+    // Add follow counts
+    const counts = await FollowService.getCounts(userRecord.id)
+    user.followersCount = counts.followersCount
+    user.followingCount = counts.followingCount
+
+    // Add granular visibility levels
+    user.statsVisibility = userRecord.statsVisibility
+    user.activityVisibility = userRecord.activityVisibility
+    user.libraryVisibility = userRecord.libraryVisibility
+
+    // Add relationship info if authenticated
+    const currentUser = (await auth.check()) ? auth.user : null
+    if (currentUser && currentUser.id !== userRecord.id) {
+      const relationship = await FollowService.getRelationship(currentUser.id, userRecord.id)
+      user.isFollowedByMe = relationship.isFollowedByMe
+      user.isFollowingMe = relationship.isFollowingMe
+      user.isFriend = relationship.isFriend
     }
 
     return response.ok(user)
@@ -212,8 +241,18 @@ export default class UsersController {
 
   async update({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
-    const { username, displayName, backdropMode, backdropColor, isStatsPublic, isActivityPublic, isLibraryPublic } =
-      await request.validateUsing(updateSchema)
+    const {
+      username,
+      displayName,
+      backdropMode,
+      backdropColor,
+      isStatsPublic,
+      isActivityPublic,
+      isLibraryPublic,
+      statsVisibility,
+      activityVisibility,
+      libraryVisibility,
+    } = await request.validateUsing(updateSchema)
 
     if (username && username !== user.username) {
       const existingUserByUsername = await User.findBy('username', username)
@@ -246,11 +285,24 @@ export default class UsersController {
     }
 
     // Update privacy preferences if provided
-    if (isStatsPublic !== undefined || isActivityPublic !== undefined || isLibraryPublic !== undefined) {
-      const privacyUpdates: Record<string, boolean> = {}
+    const hasLegacyUpdates =
+      isStatsPublic !== undefined || isActivityPublic !== undefined || isLibraryPublic !== undefined
+    const hasGranularUpdates =
+      statsVisibility !== undefined || activityVisibility !== undefined || libraryVisibility !== undefined
+
+    if (hasLegacyUpdates || hasGranularUpdates) {
+      const privacyUpdates: Record<string, boolean | string> = {}
+
+      // Legacy boolean fields
       if (isStatsPublic !== undefined) privacyUpdates.statsPublic = isStatsPublic
       if (isActivityPublic !== undefined) privacyUpdates.activityPublic = isActivityPublic
       if (isLibraryPublic !== undefined) privacyUpdates.libraryPublic = isLibraryPublic
+
+      // Granular visibility fields
+      if (statsVisibility !== undefined) privacyUpdates.statsVisibility = statsVisibility
+      if (activityVisibility !== undefined) privacyUpdates.activityVisibility = activityVisibility
+      if (libraryVisibility !== undefined) privacyUpdates.libraryVisibility = libraryVisibility
+
       user.setPrivacyPreferences(privacyUpdates)
     }
 
@@ -500,12 +552,15 @@ export default class UsersController {
       })
     }
 
-    // Check if current user is the owner (to allow viewing own private activity)
+    // Check if current user can view activity based on visibility settings
     const currentUser = (await auth.check()) ? auth.user : null
-    const isOwner = currentUser?.id === user.id
+    const canView = await FollowService.canViewContent(
+      currentUser?.id ?? null,
+      user.id,
+      user.activityVisibility
+    )
 
-    // Check if activity is private and requester is not the owner
-    if (!user.isActivityPublic && !isOwner) {
+    if (!canView) {
       throw new AppError("This user's activity is private", {
         status: 403,
         code: 'ACTIVITY_PRIVATE',
@@ -559,6 +614,8 @@ export default class UsersController {
       notifyReviewLikes: user.notifyReviewLikes,
       notifyListLikes: user.notifyListLikes,
       notifyListSaves: user.notifyListSaves,
+      notifyNewFollower: user.notifyNewFollower,
+      notifyNewFriend: user.notifyNewFriend,
     })
   }
 
@@ -566,16 +623,18 @@ export default class UsersController {
    * @summary Update notification settings
    * @tag Users
    * @description Updates the authenticated user's notification preferences
-   * @requestBody { "notifyReviewLikes": true, "notifyListLikes": true, "notifyListSaves": true }
+   * @requestBody { "notifyReviewLikes": true, "notifyListLikes": true, "notifyListSaves": true, "notifyNewFollower": true, "notifyNewFriend": true }
    * @responseBody 200 - Updated notification settings
    * @responseBody 401 - Unauthorized
    */
   async updateNotificationSettings({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
-    const { notifyReviewLikes, notifyListLikes, notifyListSaves } = request.only([
+    const { notifyReviewLikes, notifyListLikes, notifyListSaves, notifyNewFollower, notifyNewFriend } = request.only([
       'notifyReviewLikes',
       'notifyListLikes',
       'notifyListSaves',
+      'notifyNewFollower',
+      'notifyNewFriend',
     ])
 
     const updates: Record<string, boolean> = {}
@@ -589,6 +648,12 @@ export default class UsersController {
     if (typeof notifyListSaves === 'boolean') {
       updates.listSaves = notifyListSaves
     }
+    if (typeof notifyNewFollower === 'boolean') {
+      updates.newFollower = notifyNewFollower
+    }
+    if (typeof notifyNewFriend === 'boolean') {
+      updates.newFriend = notifyNewFriend
+    }
 
     user.setNotificationPreferences(updates)
     await user.save()
@@ -597,6 +662,8 @@ export default class UsersController {
       notifyReviewLikes: user.notifyReviewLikes,
       notifyListLikes: user.notifyListLikes,
       notifyListSaves: user.notifyListSaves,
+      notifyNewFollower: user.notifyNewFollower,
+      notifyNewFriend: user.notifyNewFriend,
     })
   }
 

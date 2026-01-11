@@ -3,8 +3,8 @@ import { BaseModel, belongsTo, column } from '@adonisjs/lucid/orm'
 import type { BelongsTo } from '@adonisjs/lucid/types/relations'
 import User from '#models/user'
 
-export type NotificationType = 'review_like' | 'list_like' | 'list_save'
-export type ResourceType = 'book_review' | 'list'
+export type NotificationType = 'review_like' | 'list_like' | 'list_save' | 'new_follower' | 'new_friend'
+export type ResourceType = 'book_review' | 'list' | 'user'
 
 export default class Notification extends BaseModel {
   @column({ isPrimary: true })
