@@ -3,6 +3,10 @@ import BookReview from '#models/book_review'
 import List from '#models/list'
 import User from '#models/user'
 import PushNotificationService from '#services/push_notification_service'
+import CacheService from '#services/cache_service'
+
+// Cooldown duration in seconds (24 hours)
+const NOTIFICATION_COOLDOWN_SECONDS = 24 * 60 * 60
 
 interface CreateNotificationData {
   userId: string // Recipient
@@ -51,7 +55,32 @@ export default class NotificationService {
   }
 
   /**
+   * Generates a unique cooldown key for a notification
+   */
+  private static getCooldownKey(data: CreateNotificationData): string {
+    return `notification:cooldown:${data.userId}:${data.actorId}:${data.type}:${data.resourceType}:${data.resourceId}`
+  }
+
+  /**
+   * Checks if a notification is in cooldown period
+   * Returns true if notification should be blocked (cooldown active)
+   */
+  private static async isInCooldown(data: CreateNotificationData): Promise<boolean> {
+    const key = this.getCooldownKey(data)
+    return CacheService.exists(key)
+  }
+
+  /**
+   * Sets a cooldown for a notification
+   */
+  private static async setCooldown(data: CreateNotificationData): Promise<void> {
+    const key = this.getCooldownKey(data)
+    await CacheService.set(key, Date.now(), NOTIFICATION_COOLDOWN_SECONDS)
+  }
+
+  /**
    * Sends push notification only if user has enabled this notification type
+   * and the notification is not in cooldown period
    */
   private static async sendPushNotificationIfAllowed(
     data: CreateNotificationData,
@@ -67,6 +96,16 @@ export default class NotificationService {
     if (!wantsPush) {
       return
     }
+
+    // Check cooldown to prevent spam (e.g., follow/unfollow spam)
+    const inCooldown = await this.isInCooldown(data)
+    if (inCooldown) {
+      console.log(`Notification cooldown active for ${this.getCooldownKey(data)}`)
+      return
+    }
+
+    // Set cooldown before sending to prevent race conditions
+    await this.setCooldown(data)
 
     await this.sendPushNotification(data, notificationId)
   }
