@@ -8,6 +8,11 @@ import {
   showListsQuerySchema,
 } from '#validators/user'
 import { reorderTopBooksValidator } from '#validators/library'
+import {
+  activityFiltersSchema,
+  VALID_ACTION_TYPES,
+  type ActivityPeriod,
+} from '#validators/activity'
 import { cuid } from '@adonisjs/core/helpers'
 import User from '#models/user'
 import db from '@adonisjs/lucid/services/db'
@@ -15,6 +20,27 @@ import AppError from '#exceptions/app_error'
 import ActivityLog from '#models/activity_log'
 import { ActivityLogEnricher } from '#services/activity_log_enricher'
 import FollowService from '#services/follow_service'
+import { DateTime } from 'luxon'
+
+/**
+ * Calculate date range start based on period filter
+ */
+function getDateRangeStart(period: ActivityPeriod): DateTime | null {
+  const now = DateTime.now()
+  switch (period) {
+    case 'today':
+      return now.startOf('day')
+    case 'week':
+      return now.startOf('week')
+    case 'month':
+      return now.startOf('month')
+    case 'year':
+      return now.startOf('year')
+    case 'all':
+    default:
+      return null
+  }
+}
 
 function enrichListWithUserContext(list: any, lists: List[], userId: string | null) {
   const listModel = lists.find((l) => l.id === list.id)
@@ -532,12 +558,39 @@ export default class UsersController {
   }
 
   async showMyActivity({ auth, request, response }: HttpContext) {
-    const { page = 1, limit = 10 } = request.qs()
+    const { page = 1, limit = 10, sort = 'recent', period = 'all', actions } = request.qs()
+
+    // Validate filters
+    await request.validateUsing(activityFiltersSchema)
+
     const user = await auth.authenticate()
-    const activity = await ActivityLog.query()
-      .where('user_id', user.id)
-      .orderBy('created_at', 'desc')
-      .paginate(page, limit)
+
+    // Build query with filters
+    let query = ActivityLog.query().where('user_id', user.id)
+
+    // Apply period filter
+    if (period && period !== 'all') {
+      const dateStart = getDateRangeStart(period)
+      if (dateStart) {
+        query = query.where('created_at', '>=', dateStart.toJSDate())
+      }
+    }
+
+    // Apply action types filter
+    if (actions && Array.isArray(actions) && actions.length > 0) {
+      // Filter only valid action types
+      const validActions = actions.filter((a: string) =>
+        VALID_ACTION_TYPES.includes(a as (typeof VALID_ACTION_TYPES)[number])
+      )
+      if (validActions.length > 0) {
+        query = query.whereIn('action', validActions)
+      }
+    }
+
+    // Apply sort order
+    query = query.orderBy('created_at', sort === 'oldest' ? 'asc' : 'desc')
+
+    const activity = await query.paginate(page, limit)
 
     // Enrichir les logs avec les ressources
     const enrichedData = await ActivityLogEnricher.enrich(activity.all())
@@ -549,7 +602,11 @@ export default class UsersController {
   }
 
   async showUserActivity({ auth, request, response }: HttpContext) {
-    const { page = 1, limit = 10 } = request.qs()
+    const { page = 1, limit = 10, sort = 'recent', period = 'all', actions } = request.qs()
+
+    // Validate filters
+    await request.validateUsing(activityFiltersSchema)
+
     const { params } = await request.validateUsing(showSchema)
     const { username } = params
     const user = await User.query().where('username', username).first()
@@ -576,10 +633,32 @@ export default class UsersController {
       })
     }
 
-    const activity = await ActivityLog.query()
-      .where('user_id', user.id)
-      .orderBy('created_at', 'desc')
-      .paginate(page, limit)
+    // Build query with filters
+    let query = ActivityLog.query().where('user_id', user.id)
+
+    // Apply period filter
+    if (period && period !== 'all') {
+      const dateStart = getDateRangeStart(period)
+      if (dateStart) {
+        query = query.where('created_at', '>=', dateStart.toJSDate())
+      }
+    }
+
+    // Apply action types filter
+    if (actions && Array.isArray(actions) && actions.length > 0) {
+      // Filter only valid action types
+      const validActions = actions.filter((a: string) =>
+        VALID_ACTION_TYPES.includes(a as (typeof VALID_ACTION_TYPES)[number])
+      )
+      if (validActions.length > 0) {
+        query = query.whereIn('action', validActions)
+      }
+    }
+
+    // Apply sort order
+    query = query.orderBy('created_at', sort === 'oldest' ? 'asc' : 'desc')
+
+    const activity = await query.paginate(page, limit)
 
     // Enrichir les logs avec les ressources
     const enrichedData = await ActivityLogEnricher.enrich(activity.all())
