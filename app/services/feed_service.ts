@@ -26,6 +26,8 @@ export interface BookReaderItem {
   rating: number | null
   hasReview: boolean
   reviewId: number | null
+  currentChapter: number | null
+  currentVolume: number | null
 }
 
 export interface RecentlyRatedItem {
@@ -71,10 +73,7 @@ export default class FeedService {
     const bookIds = popularBookIds.map((row) => row.book_id)
 
     // Fetch full book data with authors
-    const books = await Book.query()
-      .whereIn('id', bookIds)
-      .preload('authors')
-      .preload('publishers')
+    const books = await Book.query().whereIn('id', bookIds).preload('authors').preload('publishers')
 
     // Sort books by the order from the query (most tracked first)
     const bookMap = new Map(books.map((book) => [book.id, book]))
@@ -229,7 +228,8 @@ export default class FeedService {
     const trackings = await BookTracking.query()
       .where('book_id', bookId)
       .whereIn('user_id', followingIds)
-      .orderByRaw(`
+      .orderByRaw(
+        `
         CASE status
           WHEN 'completed' THEN 1
           WHEN 'reading' THEN 2
@@ -237,7 +237,8 @@ export default class FeedService {
           WHEN 'dropped' THEN 4
           WHEN 'plan_to_read' THEN 5
         END ASC
-      `)
+      `
+      )
       .orderByRaw('rating DESC NULLS LAST')
       .limit(limit)
       .preload('user')
@@ -260,24 +261,36 @@ export default class FeedService {
       reviewMap.set(review.userId, review.id)
     }
 
-    // Build the result
-    const readers: BookReaderItem[] = trackings.map((tracking) => {
-      const reviewId = reviewMap.get(tracking.userId) ?? null
+    // Build the result with visibility checks
+    const readers: BookReaderItem[] = await Promise.all(
+      trackings.map(async (tracking) => {
+        const reviewId = reviewMap.get(tracking.userId) ?? null
 
-      return {
-        user: {
-          id: tracking.user.id,
-          username: tracking.user.username,
-          displayName: tracking.user.displayName,
-          avatar: tracking.user.avatar,
-          plan: tracking.user.plan,
-        },
-        status: tracking.status,
-        rating: tracking.rating,
-        hasReview: reviewId !== null,
-        reviewId,
-      }
-    })
+        // Check if the viewer can see the reader's library progress
+        const canViewLibrary = await FollowService.canViewContent(
+          userId,
+          tracking.userId,
+          tracking.user.libraryVisibility
+        )
+
+        return {
+          user: {
+            id: tracking.user.id,
+            username: tracking.user.username,
+            displayName: tracking.user.displayName,
+            avatar: tracking.user.avatar,
+            plan: tracking.user.plan,
+          },
+          status: tracking.status,
+          rating: tracking.rating,
+          hasReview: reviewId !== null,
+          reviewId,
+          // Only include chapter/volume if viewer can see the library
+          currentChapter: canViewLibrary ? tracking.currentChapter : null,
+          currentVolume: canViewLibrary ? tracking.currentVolume : null,
+        }
+      })
+    )
 
     return { readers, total }
   }
