@@ -27,6 +27,12 @@ const FeedController = () => import('#controllers/feed_controller')
 
 import AutoSwagger from 'adonis-autoswagger'
 import swagger from '#config/swagger'
+
+// Health check endpoint
+router.get('/health', async ({ response }) => {
+  return response.ok({ status: 'ok' })
+})
+
 // returns swagger in YAML
 router.get('/swagger', async () => {
   return AutoSwagger.default.docs(router.toJSON(), swagger)
