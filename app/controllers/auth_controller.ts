@@ -10,10 +10,15 @@ import {
   resetPasswordSchema,
   changePasswordSchema,
   checkEmailSchema,
+  refreshTokenSchema,
 } from '#validators/auth'
 import PasswordResetToken from '#models/password_reset_token'
+import RefreshToken from '#models/refresh_token'
 import { DateTime } from 'luxon'
 import { randomBytes } from 'node:crypto'
+
+/** Duration for refresh tokens in days */
+const REFRESH_TOKEN_EXPIRY_DAYS = 90
 
 export default class AuthController {
   /**
@@ -73,9 +78,9 @@ export default class AuthController {
   /**
    * @summary Login user
    * @tag Authentication
-   * @description Authenticates user with email and password, returns access token
+   * @description Authenticates user with email and password, returns access token and refresh token
    * @requestBody <loginSchema> - User login credentials
-   * @responseBody 200 - {"type": "bearer", "name": "trk_", "token": "string", "abilities": ["*"], "lastUsedAt": "string", "expiresAt": "string"} - Authentication token
+   * @responseBody 200 - {"token": "string", "refreshToken": "string", "expiresAt": "string"} - Authentication tokens
    * @responseBody 400 - {"code": "AUTH_INVALID_CREDENTIALS", "message": "Invalid credentials"} - Invalid credentials
    * @responseBody 422 - Validation error
    */
@@ -103,9 +108,20 @@ export default class AuthController {
       })
     }
 
-    const token = await User.accessTokens.create(user)
+    // Generate access token
+    const accessToken = await User.accessTokens.create(user)
 
-    return response.ok(token)
+    // Generate refresh token
+    const { rawToken: refreshToken } = await RefreshToken.generateForUser(
+      user,
+      REFRESH_TOKEN_EXPIRY_DAYS
+    )
+
+    return response.ok({
+      token: accessToken.value!.release(),
+      refreshToken,
+      expiresAt: accessToken.expiresAt?.toISOString(),
+    })
   }
 
   /**
@@ -316,15 +332,33 @@ export default class AuthController {
       .first()
 
     if (user) {
-      // Link Google account if not already linked and normalize email
-      if (!user.googleId || user.email !== googleEmail) {
-        if (!user.googleId) {
-          user.googleId = googleUser.id
-        }
-        // Normalize email to lowercase if needed
-        if (user.email.toLowerCase() === googleEmail && user.email !== googleEmail) {
-          user.email = googleEmail
-        }
+      let needsSave = false
+
+      // Link Google account if not already linked
+      if (!user.googleId) {
+        user.googleId = googleUser.id
+        needsSave = true
+      }
+
+      // Normalize email to lowercase if needed
+      if (user.email.toLowerCase() === googleEmail && user.email !== googleEmail) {
+        user.email = googleEmail
+        needsSave = true
+      }
+
+      // Update displayName from Google if empty
+      if (!user.displayName && googleUser.name) {
+        user.displayName = googleUser.name
+        needsSave = true
+      }
+
+      // Update avatar from Google if empty
+      if (!user.avatar && googleUser.avatarUrl) {
+        user.avatar = googleUser.avatarUrl
+        needsSave = true
+      }
+
+      if (needsSave) {
         await user.save()
       }
     } else {
@@ -358,10 +392,87 @@ export default class AuthController {
       })
     }
 
-    const token = await User.accessTokens.create(user)
+    // Generate access token
+    const accessToken = await User.accessTokens.create(user)
 
-    // Redirect to mobile app with deep link
-    const deepLinkUrl = `trackr://auth/callback?token=${token.value!.release()}`
+    // Generate refresh token
+    const { rawToken: refreshToken } = await RefreshToken.generateForUser(
+      user,
+      REFRESH_TOKEN_EXPIRY_DAYS
+    )
+
+    // Redirect to mobile app with deep link containing both tokens
+    const deepLinkUrl = `trackr://auth/callback?token=${accessToken.value!.release()}&refreshToken=${refreshToken}`
     return response.redirect(deepLinkUrl)
+  }
+
+  /**
+   * @summary Refresh access token
+   * @tag Authentication
+   * @description Uses a refresh token to get a new access token
+   * @requestBody <refreshTokenSchema> - Refresh token
+   * @responseBody 200 - {"token": "string", "refreshToken": "string", "expiresAt": "string"} - New authentication tokens
+   * @responseBody 401 - {"code": "AUTH_INVALID_REFRESH_TOKEN", "message": "Invalid or expired refresh token"} - Invalid refresh token
+   */
+  async refresh({ request, response }: HttpContext) {
+    const { refreshToken: rawRefreshToken } = await refreshTokenSchema.validate(request.body())
+
+    // Find valid refresh token
+    const refreshToken = await RefreshToken.findByToken(rawRefreshToken)
+
+    if (!refreshToken) {
+      throw new AppError('Invalid or expired refresh token', {
+        status: 401,
+        code: 'AUTH_INVALID_REFRESH_TOKEN',
+      })
+    }
+
+    // Load the user
+    const user = await User.find(refreshToken.userId)
+
+    if (!user) {
+      // User was deleted, revoke the token
+      await refreshToken.revoke()
+      throw new AppError('Invalid or expired refresh token', {
+        status: 401,
+        code: 'AUTH_INVALID_REFRESH_TOKEN',
+      })
+    }
+
+    // Revoke the old refresh token (rotation for security)
+    await refreshToken.revoke()
+
+    // Generate new access token
+    const accessToken = await User.accessTokens.create(user)
+
+    // Generate new refresh token
+    const { rawToken: newRefreshToken } = await RefreshToken.generateForUser(
+      user,
+      REFRESH_TOKEN_EXPIRY_DAYS
+    )
+
+    return response.ok({
+      token: accessToken.value!.release(),
+      refreshToken: newRefreshToken,
+      expiresAt: accessToken.expiresAt?.toISOString(),
+    })
+  }
+
+  /**
+   * @summary Logout user
+   * @tag Authentication
+   * @description Revokes all refresh tokens for the authenticated user
+   * @responseBody 200 - {"message": "Logged out successfully"} - Success response
+   * @responseBody 401 - Unauthorized
+   */
+  async logout({ auth, response }: HttpContext) {
+    const user = await auth.authenticate()
+
+    // Revoke all refresh tokens for this user
+    await RefreshToken.revokeAllForUser(user.id)
+
+    return response.ok({
+      message: 'Logged out successfully',
+    })
   }
 }

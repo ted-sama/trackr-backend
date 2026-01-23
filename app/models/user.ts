@@ -178,7 +178,7 @@ export default class User extends compose(BaseModel, AuthFinder) {
   declare followers: ManyToMany<typeof User>
 
   static accessTokens = DbAccessTokensProvider.forModel(User, {
-    expiresIn: '30 days',
+    expiresIn: '15 minutes',
     prefix: 'trk_',
   })
 

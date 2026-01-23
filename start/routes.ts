@@ -8,6 +8,7 @@
 */
 
 import router from '@adonisjs/core/services/router'
+import { middleware } from '#start/kernel'
 const BooksController = () => import('#controllers/books_controller')
 const CategoriesController = () => import('#controllers/categories_controller')
 const AuthController = () => import('#controllers/auth_controller')
@@ -53,6 +54,8 @@ router
     router.post('/forgot-password', [AuthController, 'forgotPassword'])
     router.post('/reset-password', [AuthController, 'resetPassword'])
     router.post('/change-password', [AuthController, 'changePassword'])
+    router.post('/refresh', [AuthController, 'refresh'])
+    router.post('/logout', [AuthController, 'logout']).use(middleware.auth())
     router.get('/google/redirect', [AuthController, 'googleRedirect'])
     router.get('/google/callback', [AuthController, 'googleCallback'])
   })
