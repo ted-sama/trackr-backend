@@ -6,7 +6,7 @@ services:
     env_file:
       - .env
     environment:
-      NODE_ENV: production
+      NODE_ENV: ${NODE_ENV:-development}
       HOST: 0.0.0.0
     depends_on:
       db:

@@ -2,6 +2,18 @@ import env from '#start/env'
 import app from '@adonisjs/core/services/app'
 import { defineConfig, targets } from '@adonisjs/core/logger'
 
+/**
+ * Check if pino-pretty is available (not in Docker builds)
+ */
+const isPinoPrettyAvailable = (() => {
+  try {
+    require.resolve('pino-pretty')
+    return true
+  } catch {
+    return false
+  }
+})()
+
 const loggerConfig = defineConfig({
   default: 'app',
 
@@ -16,8 +28,8 @@ const loggerConfig = defineConfig({
       level: env.get('LOG_LEVEL'),
       transport: {
         targets: targets()
-          .pushIf(!app.inProduction, targets.pretty())
-          .pushIf(app.inProduction, targets.file({ destination: 1 }))
+          .pushIf(!app.inProduction && isPinoPrettyAvailable, targets.pretty())
+          .pushIf(app.inProduction || !isPinoPrettyAvailable, targets.file({ destination: 1 }))
           .toArray(),
       },
     },

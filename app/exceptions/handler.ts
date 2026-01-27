@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/node'
 import app from '@adonisjs/core/services/app'
 import { HttpContext, ExceptionHandler } from '@adonisjs/core/http'
 
@@ -67,8 +68,89 @@ export default class HttpExceptionHandler extends ExceptionHandler {
    * @note You should not attempt to send a response from this method.
    */
   async report(error: unknown, ctx: HttpContext) {
-    if (ctx && this.resolveStatus(error) >= 500) {
+    const status = this.resolveStatus(error)
+    const errorCode = this.extractCode(error)
+
+    // Log server errors
+    if (ctx && status >= 500) {
       ctx.logger.error({ err: error }, 'Unhandled server error')
+    }
+
+    // Send to Sentry (only for server errors, not client errors)
+    if (status >= 500) {
+      Sentry.withScope((scope) => {
+        // Set error level based on status
+        scope.setLevel(status >= 500 ? 'error' : 'warning')
+
+        // Add error code as tag for filtering
+        if (errorCode) {
+          scope.setTag('error_code', errorCode)
+        }
+        scope.setTag('http_status', String(status))
+
+        // Add request context
+        if (ctx) {
+          // Set transaction name
+          scope.setTransactionName(
+            `${ctx.request.method()} ${ctx.route?.pattern || ctx.request.url()}`
+          )
+
+          // Request details
+          scope.setContext('request', {
+            url: ctx.request.url(),
+            method: ctx.request.method(),
+            params: ctx.request.params(),
+            query: ctx.request.qs(),
+            headers: {
+              'user-agent': ctx.request.header('user-agent'),
+              'content-type': ctx.request.header('content-type'),
+              'accept': ctx.request.header('accept'),
+            },
+          })
+
+          // Route information
+          if (ctx.route) {
+            scope.setContext('route', {
+              pattern: ctx.route.pattern,
+              name: ctx.route.name,
+            })
+          }
+
+          // Add user context if authenticated
+          if (ctx.auth?.user) {
+            scope.setUser({
+              id: String(ctx.auth.user.id),
+              email: ctx.auth.user.email,
+              username: ctx.auth.user.username,
+            })
+          }
+
+          // Add request ID for tracing
+          const requestId = ctx.request.header('x-request-id')
+          if (requestId) {
+            scope.setTag('request_id', requestId)
+          }
+
+          // Add breadcrumb for the request
+          Sentry.addBreadcrumb({
+            category: 'http',
+            message: `${ctx.request.method()} ${ctx.request.url()}`,
+            level: 'info',
+            data: {
+              status_code: status,
+              method: ctx.request.method(),
+              url: ctx.request.url(),
+            },
+          })
+        }
+
+        // Capture the exception with full context
+        if (error instanceof Error) {
+          Sentry.captureException(error)
+        } else {
+          Sentry.captureMessage(String(error), 'error')
+        }
+      })
     }
 
     return super.report(error, ctx)

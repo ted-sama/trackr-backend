@@ -95,11 +95,20 @@ export default class RefreshToken extends BaseModel {
   }
 
   /**
-   * Clean up expired tokens (can be run periodically)
+   * Clean up expired and revoked tokens (can be run periodically)
+   * Deletes tokens that are either:
+   * - Expired (past their expiration date)
+   * - Revoked more than 7 days ago (gives time for debugging if needed)
    */
-  static async cleanupExpired(): Promise<number> {
+  static async cleanupExpiredAndRevoked(): Promise<number> {
+    const sevenDaysAgo = DateTime.now().minus({ days: 7 }).toSQL()!
+
     const deleted = await RefreshToken.query()
-      .where('expires_at', '<', DateTime.now().toSQL()!)
+      .where((query) => {
+        query
+          .where('expires_at', '<', DateTime.now().toSQL()!)
+          .orWhere('revoked_at', '<', sevenDaysAgo)
+      })
       .delete()
 
     return deleted.length

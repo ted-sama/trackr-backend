@@ -72,7 +72,6 @@ export default class User extends compose(BaseModel, AuthFinder) {
     user.plan = 'free'
   }
 
-
   @column()
   declare username: string
 
@@ -132,7 +131,6 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column.dateTime({ serializeAs: null })
   declare chatRequestsResetAt: DateTime | null
 
-
   // Push notifications
   @column({ serializeAs: null })
   declare pushToken: string | null
@@ -178,7 +176,7 @@ export default class User extends compose(BaseModel, AuthFinder) {
   declare followers: ManyToMany<typeof User>
 
   static accessTokens = DbAccessTokensProvider.forModel(User, {
-    expiresIn: '15 minutes',
+    expiresIn: '1 hour',
     prefix: 'trk_',
   })
 

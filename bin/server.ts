@@ -9,6 +9,9 @@
 |
 */
 
+// Import Sentry instrumentation FIRST before any other imports
+import './instrument.js'
+
 import 'reflect-metadata'
 import { Ignitor, prettyPrintError } from '@adonisjs/core'
 
