@@ -76,6 +76,7 @@
     "axios": "^1.12.2",
     "axios-cookiejar-support": "^6.0.5",
     "better-sqlite3": "^11.8.1",
+    "edge.js": "^6.4.0",
     "jsdom": "^25.0.1",
     "luxon": "^3.6.1",
     "pg": "^8.16.1",

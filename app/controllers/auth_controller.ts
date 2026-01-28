@@ -16,6 +16,7 @@ import PasswordResetToken from '#models/password_reset_token'
 import RefreshToken from '#models/refresh_token'
 import { DateTime } from 'luxon'
 import { randomBytes } from 'node:crypto'
+import { detectLocale, getEmailTemplate } from '#helpers/locale'
 
 /** Duration for refresh tokens in days */
 const REFRESH_TOKEN_EXPIRY_DAYS = 90
@@ -66,11 +67,14 @@ export default class AuthController {
       password,
     })
 
+    const locale = detectLocale(request)
     await mail.send((message) => {
       message.from('noreply@email.trackrr.app', 'Trackr')
-      message.to('teddynsoki@gmail.com')
-      message.subject('Welcome to Trackr')
-      message.html(`<p>Welcome to Trackr, ${user.displayName}!</p>`)
+      message.to(user.email)
+      message.subject(locale === 'fr' ? 'Bienvenue sur Trackr' : 'Welcome to Trackr')
+      message.htmlView(getEmailTemplate('welcome', locale), {
+        displayName: user.displayName || user.username,
+      })
     })
     return response.ok(user)
   }
@@ -159,18 +163,18 @@ export default class AuthController {
     })
 
     // Send reset email
+    const resetUrl = `${process.env.FRONTEND_URL || 'https://trackrr.app'}/reset-password?token=${token}`
+    const locale = detectLocale(request)
     await mail.send((message) => {
       message.from('noreply@email.trackrr.app', 'Trackr')
       message.to(user.email)
-      message.subject('Reset your Trackr password')
-      message.html(`
-        <h1>Password Reset Request</h1>
-        <p>Hello ${user.displayName || user.username},</p>
-        <p>You requested to reset your password. Click the link below to reset it:</p>
-        <p><a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password?token=${token}">Reset Password</a></p>
-        <p>This link will expire in 1 hour.</p>
-        <p>If you didn't request this, please ignore this email.</p>
-      `)
+      message.subject(
+        locale === 'fr' ? 'Réinitialise ton mot de passe Trackr' : 'Reset your Trackr password'
+      )
+      message.htmlView(getEmailTemplate('password_reset', locale), {
+        displayName: user.displayName || user.username,
+        resetUrl,
+      })
     })
 
     return response.ok({
@@ -211,16 +215,18 @@ export default class AuthController {
     await resetToken.delete()
 
     // Send confirmation email
+    const locale = detectLocale(request)
     await mail.send((message) => {
       message.from('noreply@email.trackrr.app', 'Trackr')
       message.to(user.email)
-      message.subject('Your Trackr password has been reset')
-      message.html(`
-        <h1>Password Reset Successful</h1>
-        <p>Hello ${user.displayName || user.username},</p>
-        <p>Your password has been reset successfully.</p>
-        <p>If you didn't make this change, please contact support immediately.</p>
-      `)
+      message.subject(
+        locale === 'fr'
+          ? 'Ton mot de passe Trackr a été modifié'
+          : 'Your Trackr password has been reset'
+      )
+      message.htmlView(getEmailTemplate('password_changed', locale), {
+        displayName: user.displayName || user.username,
+      })
     })
 
     return response.ok({
@@ -305,7 +311,7 @@ export default class AuthController {
    * @responseBody 400 - {"code": "AUTH_GOOGLE_DENIED", "message": "Access was denied"} - Access denied
    * @responseBody 400 - {"code": "AUTH_GOOGLE_FAILED", "message": "Google authentication failed"} - Authentication failed
    */
-  async googleCallback({ ally, response }: HttpContext) {
+  async googleCallback({ ally, request, response }: HttpContext) {
     const google = ally.use('google').stateless()
 
     if (google.accessDenied()) {
@@ -384,11 +390,14 @@ export default class AuthController {
         avatar: googleUser.avatarUrl,
       })
 
+      const locale = detectLocale(request)
       await mail.send((message) => {
         message.from('noreply@email.trackrr.app', 'Trackr')
         message.to(user!.email)
-        message.subject('Welcome to Trackr')
-        message.html(`<p>Welcome to Trackr, ${user!.displayName}!</p>`)
+        message.subject(locale === 'fr' ? 'Bienvenue sur Trackr' : 'Welcome to Trackr')
+        message.htmlView(getEmailTemplate('welcome', locale), {
+          displayName: user!.displayName || user!.username,
+        })
       })
     }
 
