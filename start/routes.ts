@@ -75,6 +75,7 @@ router
     router.post('/books/:bookId', [LibraryController, 'add'])
     router.delete('/books/:bookId', [LibraryController, 'remove'])
     router.patch('/books/:bookId', [LibraryController, 'update'])
+    router.post('/books/:bookId/pin', [LibraryController, 'togglePin'])
     router.get('/top', [UsersController, 'showTopBooks'])
     router.post('/top/:bookId', [LibraryController, 'addToTopBooks'])
     router.delete('/top/:bookId', [LibraryController, 'removeFromTopBooks'])

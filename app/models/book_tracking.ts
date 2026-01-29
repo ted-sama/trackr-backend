@@ -55,6 +55,9 @@ export default class BookTracking extends BaseModel {
   @column.dateTime()
   declare lastReadAt: DateTime | null
 
+  @column()
+  declare isPinnedInLibrary: boolean
+
   @column.dateTime()
   declare createdAt: DateTime
 

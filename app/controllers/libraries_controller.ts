@@ -365,4 +365,29 @@ export default class LibraryController {
 
     return response.ok({ message: 'Book removed from top books' })
   }
+
+  /**
+   * @summary Toggle pin status for a book in library
+   * @tag Library
+   * @description Toggles whether a book is pinned in the user's library (pinned books appear first)
+   * @paramPath bookId - Book ID - @type(number) @required
+   * @responseBody 200 - <BookTracking>.with(book) - Updated book tracking with pin status
+   * @responseBody 401 - Unauthorized
+   * @responseBody 404 - Book not found in library
+   */
+  async togglePin({ auth, params, response }: HttpContext) {
+    const user = await auth.authenticate()
+
+    const bookTracking = await BookTracking.query()
+      .where('user_id', user.id)
+      .where('book_id', params.bookId)
+      .firstOrFail()
+
+    bookTracking.isPinnedInLibrary = !bookTracking.isPinnedInLibrary
+    await bookTracking.save()
+
+    await bookTracking.load('book', (q) => q.preload('authors').preload('publishers'))
+
+    return response.ok(bookTracking)
+  }
 }
