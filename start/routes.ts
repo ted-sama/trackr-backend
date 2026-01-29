@@ -25,6 +25,7 @@ const NotificationsController = () => import('#controllers/notifications_control
 const GenresController = () => import('#controllers/genres_controller')
 const FollowsController = () => import('#controllers/follows_controller')
 const FeedController = () => import('#controllers/feed_controller')
+const PinnedBooksController = () => import('#controllers/pinned_books_controller')
 
 import AutoSwagger from 'adonis-autoswagger'
 import swagger from '#config/swagger'
@@ -83,6 +84,11 @@ router
     router.get('/stats/books', [StatsController, 'getFilteredBooks'])
     router.get('/subscription', [SubscriptionsController, 'show'])
     router.get('/chat-usage', [SubscriptionsController, 'chatUsage'])
+    router.get('/pinned-book', [PinnedBooksController, 'show'])
+    router.get('/pinned-book/with-progress', [PinnedBooksController, 'withProgress'])
+    router.post('/pinned-book', [PinnedBooksController, 'store'])
+    router.patch('/pinned-book', [PinnedBooksController, 'update'])
+    router.delete('/pinned-book', [PinnedBooksController, 'destroy'])
     router.post('/push-token', [UsersController, 'registerPushToken'])
     router.get('/notification-settings', [UsersController, 'getNotificationSettings'])
     router.patch('/notification-settings', [UsersController, 'updateNotificationSettings'])
