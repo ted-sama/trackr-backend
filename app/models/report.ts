@@ -7,6 +7,7 @@ import User from '#models/user'
 export type ReportReason = 'offensive_content' | 'spam' | 'harassment' | 'other'
 export type ReportStatus = 'pending' | 'reviewed' | 'resolved' | 'rejected'
 export type ReportResourceType = 'user' | 'list' | 'review'
+export type ReportPriority = 'low' | 'medium' | 'high' | 'critical'
 
 export default class Report extends BaseModel {
   @column({ isPrimary: true })
@@ -40,6 +41,9 @@ export default class Report extends BaseModel {
 
   @column()
   declare moderatorNotes: string | null
+
+  @column()
+  declare priority: ReportPriority
 
   @column.dateTime()
   declare reviewedAt: DateTime | null

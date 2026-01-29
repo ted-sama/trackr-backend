@@ -21,6 +21,7 @@ const StatsController = () => import('#controllers/stats_controller')
 const SubscriptionsController = () => import('#controllers/subscriptions_controller')
 const ReportsController = () => import('#controllers/reports_controller')
 const ReviewsController = () => import('#controllers/reviews_controller')
+const ModerationsController = () => import('#controllers/moderations_controller')
 const NotificationsController = () => import('#controllers/notifications_controller')
 const GenresController = () => import('#controllers/genres_controller')
 const FollowsController = () => import('#controllers/follows_controller')
@@ -93,6 +94,7 @@ router
     router.delete('/pinned-book', [UsersController, 'removePinnedBook'])
   })
   .prefix('me')
+  .use([middleware.auth(), middleware.banned()])
 
 router
   .group(() => {
@@ -139,12 +141,13 @@ router
   })
   .prefix('categories')
 
+// Lists - public routes for reading, auth+banned check for mutations
+router.get('/lists', [ListsController, 'index'])
+router.get('/lists/search', [ListsController, 'search'])
+router.get('/lists/:id', [ListsController, 'show'])
+
 router
   .group(() => {
-    router.get('/', [ListsController, 'index'])
-    router.get('/search', [ListsController, 'search'])
-    router.get('/:id', [ListsController, 'show'])
-    // router.get('/:userId', [ListsController, 'indexByUser']) GET all lists by user
     router.post('/', [ListsController, 'create'])
     router.patch('/:id', [ListsController, 'update'])
     router.delete('/:id', [ListsController, 'delete'])
@@ -158,14 +161,16 @@ router
     router.delete('/:id/save', [ListsController, 'unsaveList'])
   })
   .prefix('lists')
+  .use([middleware.auth(), middleware.banned()])
 
 router
   .group(() => {
     router.post('/:bookId', [ChatsController, 'stream'])
   })
   .prefix('chat')
+  .use([middleware.auth(), middleware.banned()])
 
-// Reports (requires authentication)
+// Reports (requires authentication + not banned)
 router
   .group(() => {
     router.post('/', [ReportsController, 'create'])
@@ -173,8 +178,9 @@ router
     router.delete('/:id', [ReportsController, 'delete'])
   })
   .prefix('reports')
+  .use([middleware.auth(), middleware.banned()])
 
-// Notifications
+// Notifications (auth required, but banned users can still read notifications)
 router
   .group(() => {
     router.get('/', [NotificationsController, 'index'])
@@ -183,6 +189,7 @@ router
     router.post('/read-all', [NotificationsController, 'markAllAsRead'])
   })
   .prefix('notifications')
+  .use([middleware.auth()])
 
 // Genres
 router
@@ -198,6 +205,7 @@ router
     router.get('/recently-rated', [FeedController, 'recentlyRated'])
   })
   .prefix('feed')
+  .use([middleware.auth(), middleware.banned()])
 
 // Webhooks (no auth required - verified via webhook secret)
 router
@@ -205,3 +213,30 @@ router
     router.post('/revenuecat', [SubscriptionsController, 'webhook'])
   })
   .prefix('webhooks')
+
+// Admin Moderation routes (requires admin role)
+router
+  .group(() => {
+    // Dashboard
+    router.get('/dashboard', [ModerationsController, 'dashboard'])
+
+    // Reports
+    router.get('/reports', [ModerationsController, 'allReports'])
+    router.get('/reports/pending', [ModerationsController, 'pendingReports'])
+    router.get('/reports/stats', [ModerationsController, 'reportStats'])
+    router.patch('/reports/:id', [ModerationsController, 'reviewReport'])
+
+    // Moderated Content
+    router.get('/moderated-content', [ModerationsController, 'moderatedContent'])
+
+    // User Management
+    router.get('/users/:userId/summary', [ModerationsController, 'userModerationSummary'])
+    router.get('/users/:userId/strikes', [ModerationsController, 'userStrikes'])
+    router.post('/users/:userId/strike', [ModerationsController, 'addStrike'])
+    router.delete('/users/:userId/strikes/:strikeId', [ModerationsController, 'removeStrike'])
+    router.delete('/users/:userId/strikes', [ModerationsController, 'clearStrikes'])
+    router.post('/users/:userId/ban', [ModerationsController, 'banUser'])
+    router.post('/users/:userId/unban', [ModerationsController, 'unbanUser'])
+  })
+  .prefix('admin/moderation')
+  .use([middleware.auth(), middleware.admin()])

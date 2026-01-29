@@ -3,7 +3,7 @@ import { BaseModel, column, belongsTo, manyToMany, computed, beforeSave } from '
 import type { BelongsTo, ManyToMany } from '@adonisjs/lucid/types/relations'
 import User from '#models/user'
 import Book from '#models/book'
-import ContentFilterService from '#services/content_filter_service'
+import AdvancedContentFilterService from '#services/advanced_content_filter_service'
 
 const parseStringArray = (value: unknown): string[] | null => {
   if (Array.isArray(value)) {
@@ -160,12 +160,12 @@ export default class List extends BaseModel {
   static async validateContent(list: List) {
     // Validate and censor list name
     if (list.$dirty.name) {
-      const nameCheck = ContentFilterService.validateAndCensor(list.name, 'list_name', {
+      const nameCheck = AdvancedContentFilterService.validateAndCensor(list.name, 'list_name', {
         autoReject: false,
         autoCensor: true,
       })
       if (nameCheck.content !== list.name && list.userId) {
-        await ContentFilterService.logModeration(
+        await AdvancedContentFilterService.logModeration(
           list.userId,
           'list_name',
           list.name,
@@ -179,7 +179,7 @@ export default class List extends BaseModel {
 
     // Validate and censor description
     if (list.$dirty.description && list.description) {
-      const descCheck = ContentFilterService.validateAndCensor(
+      const descCheck = AdvancedContentFilterService.validateAndCensor(
         list.description,
         'list_description',
         {
@@ -188,7 +188,7 @@ export default class List extends BaseModel {
         }
       )
       if (descCheck.content !== list.description && list.userId) {
-        await ContentFilterService.logModeration(
+        await AdvancedContentFilterService.logModeration(
           list.userId,
           'list_description',
           list.description,
@@ -203,7 +203,7 @@ export default class List extends BaseModel {
     // Validate and censor tags
     if (list.$dirty.tags && list.tags && list.tags.length > 0) {
       const censoredTags = list.tags.map((tag) => {
-        const tagCheck = ContentFilterService.validateAndCensor(tag, 'list_tags', {
+        const tagCheck = AdvancedContentFilterService.validateAndCensor(tag, 'list_tags', {
           autoReject: false,
           autoCensor: true,
         })
@@ -212,7 +212,7 @@ export default class List extends BaseModel {
 
       const hasChanges = censoredTags.some((tag, index) => tag !== list.tags![index])
       if (hasChanges && list.userId) {
-        await ContentFilterService.logModeration(
+        await AdvancedContentFilterService.logModeration(
           list.userId,
           'list_tags',
           JSON.stringify(list.tags),

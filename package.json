@@ -79,6 +79,7 @@
     "edge.js": "^6.4.0",
     "jsdom": "^25.0.1",
     "luxon": "^3.6.1",
+    "obscenity": "^0.4.0",
     "pg": "^8.16.1",
     "puppeteer": "^23.11.1",
     "puppeteer-extra": "^3.3.6",

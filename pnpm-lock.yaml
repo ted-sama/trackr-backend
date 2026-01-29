@@ -77,6 +77,9 @@ importers:
       luxon:
         specifier: ^3.6.1
         version: 3.6.1
+      obscenity:
+        specifier: ^0.4.0
+        version: 0.4.6
       pg:
         specifier: ^8.16.1
         version: 8.16.1
@@ -3586,6 +3589,10 @@ packages:
   object-inspect@1.13.4:
     resolution: {integrity: sha512-W67iLl4J2EXEGTbfeHCffrjDfitvLANg0UlX3wFUUSTx92KXRFegMHUVgSqE+wvhAbi4WqjGg9czysTV2Epbew==}
     engines: {node: '>= 0.4'}
+
+  obscenity@0.4.6:
+    resolution: {integrity: sha512-pHk7kNN7j3L3zGhhGnwxjvXIGsPpLrcZl2r58fqWh/V/rH6b/dafscj2sMmAY+A/9/wPsocLmimgGk2DKeKsFQ==}
+    engines: {node: '>=18.0.0'}
 
   on-exit-leak-free@2.1.2:
     resolution: {integrity: sha512-0eJJY6hXLGf1udHwfNftBqH+g73EU4B504nZeKpz1sYRKafAghwxEJunB2O7rDZkL4PGfsMVnTXZ2EjibbqcsA==}
@@ -9096,6 +9103,8 @@ snapshots:
   nwsapi@2.2.22: {}
 
   object-inspect@1.13.4: {}
+
+  obscenity@0.4.6: {}
 
   on-exit-leak-free@2.1.2: {}
 

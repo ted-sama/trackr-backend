@@ -19,7 +19,8 @@ import List from '#models/list'
 import BookTracking from '#models/book_tracking'
 import BookReview from '#models/book_review'
 import Book from './book.js'
-import ContentFilterService from '#services/content_filter_service'
+import UserStrike from '#models/user_strike'
+import AdvancedContentFilterService from '#services/advanced_content_filter_service'
 import AppError from '#exceptions/app_error'
 
 export interface NotificationPreferences {
@@ -140,6 +141,29 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column()
   declare pinnedBookId: number | null
 
+  // Ban system fields
+  @column()
+  declare isBanned: boolean
+
+  @column.dateTime()
+  declare bannedUntil: DateTime | null
+
+  @column()
+  declare banReason: string | null
+
+  @column()
+  declare bannedBy: string | null
+
+  @column.dateTime()
+  declare bannedAt: DateTime | null
+
+  // Strike system
+  @column()
+  declare strikeCount: number
+
+  @column.dateTime()
+  declare lastStrikeAt: DateTime | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
@@ -185,6 +209,14 @@ export default class User extends compose(BaseModel, AuthFinder) {
   })
   declare pinnedBook: BelongsTo<typeof Book>
 
+  @belongsTo(() => User, {
+    foreignKey: 'bannedBy',
+  })
+  declare bannedByUser: BelongsTo<typeof User>
+
+  @hasMany(() => UserStrike)
+  declare strikes: HasMany<typeof UserStrike>
+
   static accessTokens = DbAccessTokensProvider.forModel(User, {
     expiresIn: '1 hour',
     prefix: 'trk_',
@@ -197,6 +229,47 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @computed()
   get hasPassword(): boolean {
     return !!this.password
+  }
+
+  /**
+   * Check if user is currently banned (considers temp ban expiration)
+   */
+  @computed()
+  get isCurrentlyBanned(): boolean {
+    if (!this.isBanned) {
+      return false
+    }
+    // If there's a bannedUntil date, check if it's still in effect
+    if (this.bannedUntil) {
+      return DateTime.now() < this.bannedUntil
+    }
+    // Permanent ban (no bannedUntil date)
+    return true
+  }
+
+  /**
+   * Check if user has a permanent ban
+   */
+  @computed()
+  get isPermanentlyBanned(): boolean {
+    return this.isBanned && !this.bannedUntil
+  }
+
+  /**
+   * Get remaining ban time in a human-readable format
+   */
+  get banTimeRemaining(): string | null {
+    if (!this.isBanned || !this.bannedUntil) {
+      return null
+    }
+    const diff = this.bannedUntil.diff(DateTime.now(), ['days', 'hours', 'minutes'])
+    if (diff.days > 0) {
+      return `${Math.floor(diff.days)} days`
+    }
+    if (diff.hours > 0) {
+      return `${Math.floor(diff.hours)} hours`
+    }
+    return `${Math.floor(diff.minutes)} minutes`
   }
 
   /**
@@ -350,21 +423,26 @@ export default class User extends compose(BaseModel, AuthFinder) {
   static async validateContent(user: User) {
     // Validate username (reject if offensive)
     if (user.$dirty.username) {
-      const usernameCheck = ContentFilterService.validateAndCensor(user.username, 'username', {
+      const usernameCheck = AdvancedContentFilterService.validateAndCensor(user.username, 'username', {
         autoReject: true,
         autoCensor: false,
       })
       if (!usernameCheck.isValid) {
+        const reasonMessage = usernameCheck.reason === 'profanity'
+          ? 'contains inappropriate language'
+          : usernameCheck.reason === 'hate_speech'
+            ? 'contains hateful content'
+            : 'violates our content policy'
         throw new AppError(
-          'Username contains inappropriate content. Please choose a different username.',
-          { status: 400, code: 'INVALID_USERNAME' }
+          `Username ${reasonMessage}. Please choose a different username.`,
+          { status: 400, code: 'CONTENT_POLICY_VIOLATION' }
         )
       }
     }
 
     // Validate and censor displayName
     if (user.$dirty.displayName && user.displayName) {
-      const displayNameCheck = ContentFilterService.validateAndCensor(
+      const displayNameCheck = AdvancedContentFilterService.validateAndCensor(
         user.displayName,
         'display_name',
         { autoReject: false, autoCensor: true }
@@ -372,7 +450,7 @@ export default class User extends compose(BaseModel, AuthFinder) {
       if (displayNameCheck.content !== user.displayName) {
         // Log the moderation if user already exists (update case)
         if (user.id) {
-          await ContentFilterService.logModeration(
+          await AdvancedContentFilterService.logModeration(
             user.id,
             'display_name',
             user.displayName,
@@ -386,13 +464,13 @@ export default class User extends compose(BaseModel, AuthFinder) {
 
     // Validate and censor bio
     if (user.$dirty.bio && user.bio) {
-      const bioCheck = ContentFilterService.validateAndCensor(user.bio, 'bio', {
+      const bioCheck = AdvancedContentFilterService.validateAndCensor(user.bio, 'bio', {
         autoReject: false,
         autoCensor: true,
       })
       if (bioCheck.content !== user.bio) {
         if (user.id) {
-          await ContentFilterService.logModeration(
+          await AdvancedContentFilterService.logModeration(
             user.id,
             'bio',
             user.bio,

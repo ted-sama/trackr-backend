@@ -4,7 +4,7 @@ import type { BelongsTo, HasMany, ManyToMany } from '@adonisjs/lucid/types/relat
 import User from '#models/user'
 import Book from '#models/book'
 import BookReviewRevision from '#models/book_review_revision'
-import ContentFilterService from '#services/content_filter_service'
+import AdvancedContentFilterService from '#services/advanced_content_filter_service'
 
 export default class BookReview extends BaseModel {
   public static table = 'book_reviews'
@@ -73,7 +73,7 @@ export default class BookReview extends BaseModel {
   static async validateContent(review: BookReview) {
     // Validate and censor review content
     if (review.$dirty.content) {
-      const contentCheck = ContentFilterService.validateAndCensor(
+      const contentCheck = AdvancedContentFilterService.validateAndCensor(
         review.content,
         'review_content',
         {
@@ -82,7 +82,7 @@ export default class BookReview extends BaseModel {
         }
       )
       if (contentCheck.content !== review.content && review.userId) {
-        await ContentFilterService.logModeration(
+        await AdvancedContentFilterService.logModeration(
           review.userId,
           'review_content',
           review.content,
