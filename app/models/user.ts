@@ -9,10 +9,11 @@ import {
   beforeCreate,
   beforeSave,
   manyToMany,
+  belongsTo,
 } from '@adonisjs/lucid/orm'
 import { withAuthFinder } from '@adonisjs/auth/mixins/lucid'
 import { DbAccessTokensProvider } from '@adonisjs/auth/access_tokens'
-import type { HasMany, ManyToMany } from '@adonisjs/lucid/types/relations'
+import type { HasMany, ManyToMany, BelongsTo } from '@adonisjs/lucid/types/relations'
 import { randomUUID } from 'node:crypto'
 import List from '#models/list'
 import BookTracking from '#models/book_tracking'
@@ -135,6 +136,10 @@ export default class User extends compose(BaseModel, AuthFinder) {
   @column({ serializeAs: null })
   declare pushToken: string | null
 
+  // Pinned book for home screen (Trackr Plus feature)
+  @column()
+  declare pinnedBookId: number | null
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 
@@ -174,6 +179,11 @@ export default class User extends compose(BaseModel, AuthFinder) {
     serializeAs: null,
   })
   declare followers: ManyToMany<typeof User>
+
+  @belongsTo(() => Book, {
+    foreignKey: 'pinnedBookId',
+  })
+  declare pinnedBook: BelongsTo<typeof Book>
 
   static accessTokens = DbAccessTokensProvider.forModel(User, {
     expiresIn: '1 hour',

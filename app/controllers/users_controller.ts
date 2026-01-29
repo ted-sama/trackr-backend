@@ -7,7 +7,7 @@ import {
   updateAvatarSchema,
   showListsQuerySchema,
 } from '#validators/user'
-import { reorderTopBooksValidator } from '#validators/library'
+import { reorderTopBooksValidator, setPinnedBookValidator } from '#validators/library'
 import {
   activityFiltersSchema,
   VALID_ACTION_TYPES,
@@ -15,6 +15,7 @@ import {
 } from '#validators/activity'
 import { cuid } from '@adonisjs/core/helpers'
 import User from '#models/user'
+import Book from '#models/book'
 import db from '@adonisjs/lucid/services/db'
 import AppError from '#exceptions/app_error'
 import ActivityLog from '#models/activity_log'
@@ -776,6 +777,130 @@ export default class UsersController {
     // - users_top_books (users_top_books.user_id -> users.id)
     // Note: S3 files (avatar, backdrop) are left orphaned - can be cleaned up via a separate process
     await user.delete()
+
+    return response.noContent()
+  }
+
+  /**
+   * @summary Get pinned book
+   * @tag Users
+   * @description Returns the authenticated user's pinned book with tracking info
+   * @responseBody 200 - Pinned book data with tracking
+   * @responseBody 401 - Unauthorized
+   */
+  async getPinnedBook({ auth, response }: HttpContext) {
+    const user = await auth.authenticate()
+
+    if (!user.pinnedBookId) {
+      return response.ok({ book: null, tracking: null })
+    }
+
+    await user.load('pinnedBook', (query) => {
+      query.preload('authors').preload('publishers')
+    })
+
+    if (!user.pinnedBook) {
+      return response.ok({ book: null, tracking: null })
+    }
+
+    // Get tracking info for this book
+    const tracking = await user
+      .related('bookTrackings')
+      .query()
+      .where('book_id', user.pinnedBookId)
+      .first()
+
+    return response.ok({
+      book: user.pinnedBook,
+      tracking: tracking
+        ? {
+            status: tracking.status,
+            currentChapter: tracking.currentChapter,
+            currentVolume: tracking.currentVolume,
+            rating: tracking.rating,
+            startDate: tracking.startDate,
+            finishDate: tracking.finishDate,
+            lastReadAt: tracking.lastReadAt,
+          }
+        : null,
+    })
+  }
+
+  /**
+   * @summary Set pinned book
+   * @tag Users
+   * @description Pin a book to the home screen (Trackr Plus only)
+   * @responseBody 201 - Book pinned successfully
+   * @responseBody 401 - Unauthorized
+   * @responseBody 403 - Trackr Plus required
+   * @responseBody 404 - Book not found
+   */
+  async setPinnedBook({ auth, request, response }: HttpContext) {
+    const user = await auth.authenticate()
+
+    // Check if user has Plus subscription
+    if (user.plan !== 'plus') {
+      throw new AppError('Pinning a book requires Trackr Plus', {
+        status: 403,
+        code: 'USER_PLUS_REQUIRED',
+      })
+    }
+
+    const { params } = await request.validateUsing(setPinnedBookValidator)
+    const { bookId } = params
+
+    // Check if book exists
+    const book = await Book.find(bookId)
+    if (!book) {
+      throw new AppError('Book not found', {
+        status: 404,
+        code: 'BOOK_NOT_FOUND',
+      })
+    }
+
+    // Pin the book
+    await user.merge({ pinnedBookId: bookId }).save()
+
+    // Return the pinned book with tracking
+    await user.load('pinnedBook', (query) => {
+      query.preload('authors').preload('publishers')
+    })
+
+    const tracking = await user
+      .related('bookTrackings')
+      .query()
+      .where('book_id', bookId)
+      .first()
+
+    return response.created({
+      book: user.pinnedBook,
+      tracking: tracking
+        ? {
+            status: tracking.status,
+            currentChapter: tracking.currentChapter,
+            currentVolume: tracking.currentVolume,
+            rating: tracking.rating,
+            startDate: tracking.startDate,
+            finishDate: tracking.finishDate,
+            lastReadAt: tracking.lastReadAt,
+          }
+        : null,
+    })
+  }
+
+  /**
+   * @summary Remove pinned book
+   * @tag Users
+   * @description Unpin the currently pinned book from home screen
+   * @responseBody 204 - Book unpinned successfully
+   * @responseBody 401 - Unauthorized
+   */
+  async removePinnedBook({ auth, response }: HttpContext) {
+    const user = await auth.authenticate()
+
+    if (user.pinnedBookId) {
+      await user.merge({ pinnedBookId: null }).save()
+    }
 
     return response.noContent()
   }

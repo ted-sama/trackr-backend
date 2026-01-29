@@ -31,3 +31,11 @@ export const reorderTopBooksValidator = vine.compile(
     bookIds: vine.array(vine.number().positive()),
   })
 )
+
+export const setPinnedBookValidator = vine.compile(
+  vine.object({
+    params: vine.object({
+      bookId: vine.number().positive(),
+    }),
+  })
+)

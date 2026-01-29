@@ -88,6 +88,9 @@ router
     router.patch('/notification-settings', [UsersController, 'updateNotificationSettings'])
     router.get('/followers', [FollowsController, 'getMyFollowers'])
     router.get('/following', [FollowsController, 'getMyFollowing'])
+    router.get('/pinned-book', [UsersController, 'getPinnedBook'])
+    router.post('/pinned-book/:bookId', [UsersController, 'setPinnedBook'])
+    router.delete('/pinned-book', [UsersController, 'removePinnedBook'])
   })
   .prefix('me')
 
