@@ -21,6 +21,7 @@ import AppError from '#exceptions/app_error'
 import ActivityLog from '#models/activity_log'
 import { ActivityLogEnricher } from '#services/activity_log_enricher'
 import FollowService from '#services/follow_service'
+import ImageStorageService from '#services/image_storage_service'
 import { DateTime } from 'luxon'
 
 /**
@@ -377,23 +378,33 @@ export default class UsersController {
       throw new AppError('GIF avatars are only available for Trackr Plus subscribers', {
         status: 403,
         code: 'USER_AVATAR_GIF_PLUS_REQUIRED',
-        // meta: {
-        //   requiredPlan: 'plus',
-        //   currentPlan: user.plan,
-        // },
       })
     }
+
+    // Save old avatar URL for cleanup after successful upload
+    const oldAvatarUrl = user.avatar
 
     const key = `images/user/avatar/${cuid()}.${avatar.extname}`
     await avatar.moveToDisk(key)
 
     await user.merge({ avatar: avatar.meta.url }).save()
 
+    // Delete old avatar from R2 after successful save
+    if (oldAvatarUrl) {
+      await ImageStorageService.deleteByUrl(oldAvatarUrl)
+    }
+
     return response.accepted({})
   }
 
   async deleteAvatar({ auth, response }: HttpContext) {
     const user = await auth.authenticate()
+
+    // Delete avatar from R2 before clearing the reference
+    if (user.avatar) {
+      await ImageStorageService.deleteByUrl(user.avatar)
+    }
+
     await user.merge({ avatar: null }).save()
     return response.accepted({})
   }
@@ -406,10 +417,6 @@ export default class UsersController {
       throw new AppError('Image backdrops are only available for Trackr Plus subscribers', {
         status: 403,
         code: 'USER_BACKDROP_PLUS_REQUIRED',
-        // meta: {
-        //   requiredPlan: 'plus',
-        //   currentPlan: user.plan,
-        // },
       })
     }
 
@@ -429,10 +436,18 @@ export default class UsersController {
       })
     }
 
+    // Save old backdrop URL for cleanup after successful upload
+    const oldBackdropUrl = user.backdropImage
+
     const key = `images/user/backdrop/${cuid()}.${backdrop.extname}`
     await backdrop.moveToDisk(key)
 
     await user.merge({ backdropImage: backdrop.meta.url }).save()
+
+    // Delete old backdrop from R2 after successful save
+    if (oldBackdropUrl) {
+      await ImageStorageService.deleteByUrl(oldBackdropUrl)
+    }
 
     return response.accepted({})
   }
@@ -766,6 +781,17 @@ export default class UsersController {
   async deleteAccount({ auth, response }: HttpContext) {
     const user = await auth.authenticate()
 
+    // Collect all image URLs to delete from R2
+    const imagesToDelete: (string | null | undefined)[] = [user.avatar, user.backdropImage]
+
+    // Get all list backdrop images for this user
+    const userLists = await List.query().where('userId', user.id).select('backdropImage')
+    for (const list of userLists) {
+      if (list.backdropImage) {
+        imagesToDelete.push(list.backdropImage)
+      }
+    }
+
     // Delete the user - cascading will handle:
     // - access_tokens (auth_access_tokens.tokenable_id -> users.id)
     // - lists (lists.user_id -> users.id)
@@ -775,8 +801,10 @@ export default class UsersController {
     // - activity_logs (activity_logs.user_id -> users.id)
     // - reports (reports.reporter_id -> users.id)
     // - users_top_books (users_top_books.user_id -> users.id)
-    // Note: S3 files (avatar, backdrop) are left orphaned - can be cleaned up via a separate process
     await user.delete()
+
+    // Delete all images from R2 after successful user deletion
+    await ImageStorageService.deleteMultipleByUrls(imagesToDelete)
 
     return response.noContent()
   }

@@ -3,6 +3,7 @@ import List from '#models/list'
 import AppError from '#exceptions/app_error'
 import db from '@adonisjs/lucid/services/db'
 import NotificationService from '#services/notification_service'
+import ImageStorageService from '#services/image_storage_service'
 import {
   addBookSchema,
   createSchema,
@@ -442,7 +443,15 @@ export default class ListsController {
       })
     }
 
+    // Save backdrop URL for cleanup after deletion
+    const backdropUrl = list.backdropImage
+
     await list.delete()
+
+    // Delete backdrop image from R2 after successful deletion
+    if (backdropUrl) {
+      await ImageStorageService.deleteByUrl(backdropUrl)
+    }
 
     return response.noContent()
   }
@@ -652,10 +661,18 @@ export default class ListsController {
       })
     }
 
+    // Save old backdrop URL for cleanup after successful upload
+    const oldBackdropUrl = list.backdropImage
+
     const key = `images/list/backdrop/${cuid()}.${backdrop.extname}`
     await backdrop.moveToDisk(key)
 
     await list.merge({ backdropImage: backdrop.meta.url }).save()
+
+    // Delete old backdrop from R2 after successful save
+    if (oldBackdropUrl) {
+      await ImageStorageService.deleteByUrl(oldBackdropUrl)
+    }
 
     return response.accepted({})
   }
