@@ -29,12 +29,12 @@ export default await Env.create(new URL('../', import.meta.url), {
   DB_PASSWORD: Env.schema.string.optional(),
   DB_DATABASE: Env.schema.string(),
 
-  // AWS
-  AWS_ACCESS_KEY_ID: Env.schema.string(),
-  AWS_SECRET_ACCESS_KEY: Env.schema.string(),
-  AWS_REGION: Env.schema.string(),
-  S3_BUCKET: Env.schema.string(),
-  CDN_URL: Env.schema.string({ format: 'url' }),
+  // Cloudflare R2 Storage
+  R2_ACCOUNT_ID: Env.schema.string(),
+  R2_ACCESS_KEY_ID: Env.schema.string(),
+  R2_SECRET_ACCESS_KEY: Env.schema.string(),
+  R2_BUCKET: Env.schema.string(),
+  R2_PUBLIC_URL: Env.schema.string({ format: 'url' }),
 
   // Upstash Redis Cache
   UPSTASH_REDIS_REST_URL: Env.schema.string({ format: 'url' }),

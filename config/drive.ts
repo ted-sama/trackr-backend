@@ -18,12 +18,13 @@ const driveConfig = defineConfig({
     }),
     s3: services.s3({
       credentials: {
-        accessKeyId: env.get('AWS_ACCESS_KEY_ID'),
-        secretAccessKey: env.get('AWS_SECRET_ACCESS_KEY'),
+        accessKeyId: env.get('R2_ACCESS_KEY_ID'),
+        secretAccessKey: env.get('R2_SECRET_ACCESS_KEY'),
       },
-      region: env.get('AWS_REGION'),
-      bucket: env.get('S3_BUCKET'),
-      cdnUrl: env.get('CDN_URL'),
+      region: 'auto',
+      bucket: env.get('R2_BUCKET'),
+      endpoint: `https://${env.get('R2_ACCOUNT_ID')}.r2.cloudflarestorage.com`,
+      cdnUrl: env.get('R2_PUBLIC_URL'),
       visibility: 'public',
     }),
   },

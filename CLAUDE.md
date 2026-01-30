@@ -12,7 +12,7 @@ REST API built with AdonisJS v6 to power the Trackr application (book tracker).
 - **Runtime**: Node.js with TypeScript 5.8
 - **Database**: PostgreSQL (via Lucid ORM)
 - **Authentication**: @adonisjs/auth v9.4.0
-- **Storage**: AWS S3 via @adonisjs/drive
+- **Storage**: Cloudflare R2 via @adonisjs/drive
 - **AI**: Google Gemini (@google/genai), OpenRouter
 - **Cache**: Upstash Redis
 - **Email**: @adonisjs/mail
@@ -202,11 +202,12 @@ DB_USER=postgres
 DB_PASSWORD=postgres
 DB_DATABASE=trackr
 
-# AWS S3
-AWS_ACCESS_KEY_ID=
-AWS_SECRET_ACCESS_KEY=
-AWS_REGION=
-AWS_BUCKET=
+# Cloudflare R2 Storage
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET=
+R2_PUBLIC_URL=
 
 # Upstash Redis
 UPSTASH_REDIS_REST_URL=
@@ -321,7 +322,7 @@ Configuration in `config/swagger.ts`.
 - Google OAuth
 - Password reset via email
 
-### Storage (AWS S3)
+### Storage (Cloudflare R2)
 - Book cover image uploads
 - User avatar management
 - Pre-signed URLs for access
