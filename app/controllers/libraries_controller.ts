@@ -189,12 +189,34 @@ export default class LibraryController {
     }
 
     const dataToUpdate: { [key: string]: any } = { ...payload }
+    const statusProvided = Object.prototype.hasOwnProperty.call(payload, 'status')
 
-    if (status === 'reading' && bookTracking.status !== 'reading') {
+    if (!statusProvided && currentChapter !== undefined) {
+      const previousChapter = bookTracking.currentChapter ?? 0
+
+      if (bookTracking.status === 'plan_to_read' && currentChapter > 0 && previousChapter <= 0) {
+        dataToUpdate.status = 'reading'
+      } else if (
+        bookTracking.status === 'reading' &&
+        book.chapters !== null &&
+        currentChapter >= book.chapters
+      ) {
+        dataToUpdate.status = 'completed'
+      } else if (
+        (bookTracking.status === 'on_hold' || bookTracking.status === 'dropped') &&
+        currentChapter > previousChapter
+      ) {
+        dataToUpdate.status = 'reading'
+      }
+    }
+
+    const nextStatus = dataToUpdate.status
+
+    if (nextStatus === 'reading' && bookTracking.status !== 'reading' && !bookTracking.startDate) {
       dataToUpdate.startDate = DateTime.now()
     }
 
-    if (status === 'completed' && bookTracking.status !== 'completed') {
+    if (nextStatus === 'completed' && bookTracking.status !== 'completed' && !bookTracking.finishDate) {
       dataToUpdate.finishDate = DateTime.now()
     }
 
@@ -203,8 +225,8 @@ export default class LibraryController {
     }
 
     if (
-      (currentChapter && currentChapter !== bookTracking.currentChapter) ||
-      (currentVolume && currentVolume !== bookTracking.currentVolume)
+      (currentChapter !== undefined && currentChapter !== bookTracking.currentChapter) ||
+      (currentVolume !== undefined && currentVolume !== bookTracking.currentVolume)
     ) {
       dataToUpdate.lastReadAt = DateTime.now()
     }
@@ -244,6 +266,16 @@ export default class LibraryController {
       .where('user_id', user.id)
       .where('book_id', book.id)
       .update(dataToUpdate)
+
+    if (!statusProvided && dataToUpdate.status && dataToUpdate.status !== bookTracking.status) {
+      await ActivityLogger.log({
+        userId: user.id,
+        action: 'book.statusUpdated',
+        metadata: { status: dataToUpdate.status },
+        resourceType: 'book',
+        resourceId: book.id,
+      })
+    }
 
     // log activity for each field that was updated
     Object.entries(payload).forEach(async ([field, value]) => {
