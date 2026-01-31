@@ -194,19 +194,33 @@ export default class LibraryController {
     if (!statusProvided && currentChapter !== undefined) {
       const previousChapter = bookTracking.currentChapter ?? 0
 
+      // Case 1: Start reading (0 -> 1+)
       if (bookTracking.status === 'plan_to_read' && currentChapter > 0 && previousChapter <= 0) {
         dataToUpdate.status = 'reading'
-      } else if (
+      }
+      // Case 2: Complete reading (progress >= total)
+      else if (
         bookTracking.status === 'reading' &&
         book.chapters !== null &&
         currentChapter >= book.chapters
       ) {
         dataToUpdate.status = 'completed'
-      } else if (
+      }
+      // Case 3: Resume reading (progress increased)
+      else if (
         (bookTracking.status === 'on_hold' || bookTracking.status === 'dropped') &&
         currentChapter > previousChapter
       ) {
         dataToUpdate.status = 'reading'
+      }
+      // Case 4: Revert to reading if progress < total (Ted's Rule)
+      else if (
+        bookTracking.status === 'completed' &&
+        book.chapters !== null &&
+        currentChapter < book.chapters
+      ) {
+        dataToUpdate.status = 'reading'
+        dataToUpdate.finishDate = null
       }
     }
 
