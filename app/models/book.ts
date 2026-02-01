@@ -98,7 +98,7 @@ export default class Book extends BaseModel {
   declare dataSource: string | null
 
   @column()
-  declare externalId: number | null
+  declare externalId: string | null
 
   @column()
   declare nsfw: boolean | null

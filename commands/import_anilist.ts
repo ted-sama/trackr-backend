@@ -283,6 +283,9 @@ const buildInsertParameters = (book: ReturnType<typeof mapMediaToBook>) => [
   book.rating_count,
 ]
 
+// R2 URL prefix to detect covers already synced to R2
+const R2_URL_PREFIX = env.get('R2_PUBLIC_URL') || ''
+
 const buildUpdateParameters = (book: ReturnType<typeof mapMediaToBook>) => [
   book.title,
   book.cover_image,
@@ -302,12 +305,16 @@ const buildUpdateParameters = (book: ReturnType<typeof mapMediaToBook>) => [
   book.rating_count,
   book.external_id,
   book.data_source,
+  R2_URL_PREFIX, // $19 - R2 prefix to preserve synced covers
 ]
 
 const updateStatement = `
   UPDATE books
      SET title = $1,
-         cover_image = $2,
+         cover_image = CASE
+           WHEN cover_image LIKE $19 || '%' THEN cover_image
+           ELSE COALESCE($2, cover_image)
+         END,
          type = $3,
          rating = $4,
          genres = $5,

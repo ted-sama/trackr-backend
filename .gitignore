@@ -23,3 +23,7 @@ yarn-error.log
 
 # Platform specific
 .DS_Store
+
+# GCD database files (large)
+storage/gcd/*
+!storage/gcd/.gitkeep
