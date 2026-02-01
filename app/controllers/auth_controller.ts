@@ -411,7 +411,7 @@ export default class AuthController {
     )
 
     // Redirect to mobile app with deep link containing both tokens
-    const deepLinkUrl = `trackr://auth/callback?token=${accessToken.value!.release()}&refreshToken=${refreshToken}`
+    const deepLinkUrl = `trackr://auth/callback?token=${encodeURIComponent(accessToken.value!.release())}&refreshToken=${encodeURIComponent(refreshToken)}`
     return response.redirect(deepLinkUrl)
   }
 
