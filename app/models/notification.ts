@@ -9,6 +9,10 @@ export type NotificationType =
   | 'list_save'
   | 'new_follower'
   | 'new_friend'
+  // Comment notification types
+  | 'review_comment'
+  | 'comment_like'
+  | 'comment_mention'
   // Moderation notification types
   | 'content_moderated'
   | 'strike_received'
@@ -16,7 +20,13 @@ export type NotificationType =
   | 'account_unbanned'
   | 'report_resolved'
 
-export type ResourceType = 'book_review' | 'list' | 'user' | 'report' | 'moderation'
+export type ResourceType =
+  | 'book_review'
+  | 'list'
+  | 'user'
+  | 'report'
+  | 'moderation'
+  | 'review_comment'
 
 export default class Notification extends BaseModel {
   @column({ isPrimary: true })

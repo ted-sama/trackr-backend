@@ -13,6 +13,7 @@ export type ModerationResourceType =
   | 'list_tags'
   | 'book_notes'
   | 'review_content'
+  | 'comment_content'
 
 export type ModerationAction = 'warning' | 'auto_censored' | 'deleted' | 'user_banned'
 export type ModerationReason = 'profanity' | 'hate_speech' | 'spam' | 'harassment' | 'reported'

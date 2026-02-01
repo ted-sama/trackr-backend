@@ -21,6 +21,7 @@ const StatsController = () => import('#controllers/stats_controller')
 const SubscriptionsController = () => import('#controllers/subscriptions_controller')
 const ReportsController = () => import('#controllers/reports_controller')
 const ReviewsController = () => import('#controllers/reviews_controller')
+const ReviewCommentsController = () => import('#controllers/review_comments_controller')
 const ModerationsController = () => import('#controllers/moderations_controller')
 const NotificationsController = () => import('#controllers/notifications_controller')
 const GenresController = () => import('#controllers/genres_controller')
@@ -134,6 +135,23 @@ router
     router.delete('/:bookId/reviews/:id/like', [ReviewsController, 'unlike'])
   })
   .prefix('books')
+
+// Review Comments
+router
+  .group(() => {
+    router.get('/:reviewId/comments', [ReviewCommentsController, 'index'])
+    router.post('/:reviewId/comments', [ReviewCommentsController, 'store'])
+  })
+  .prefix('reviews')
+
+router
+  .group(() => {
+    router.patch('/:id', [ReviewCommentsController, 'update'])
+    router.delete('/:id', [ReviewCommentsController, 'destroy'])
+    router.post('/:id/like', [ReviewCommentsController, 'toggleLike'])
+  })
+  .prefix('comments')
+  .use([middleware.auth(), middleware.banned()])
 
 router
   .group(() => {
