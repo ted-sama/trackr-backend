@@ -35,6 +35,9 @@ export default class ReviewComment extends BaseModel {
   @column()
   declare likesCount: number
 
+  @column()
+  declare depth: number
+
   @column.dateTime({ autoCreate: true })
   declare createdAt: DateTime
 

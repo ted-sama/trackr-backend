@@ -144,6 +144,9 @@ router
   })
   .prefix('reviews')
 
+// Public endpoint for lazy loading comment replies
+router.get('/comments/:id/replies', [ReviewCommentsController, 'replies'])
+
 router
   .group(() => {
     router.patch('/:id', [ReviewCommentsController, 'update'])

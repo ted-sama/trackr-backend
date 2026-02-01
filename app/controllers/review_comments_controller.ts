@@ -40,30 +40,47 @@ export default class ReviewCommentsController {
       })
     }
 
-    // Get top-level comments (no parent)
+    // Get top-level comments (no parent) with 3 levels of nested replies
     const comments = await ReviewComment.query()
       .where('review_id', reviewId)
       .whereNull('parent_id')
       .preload('user')
       .preload('likedBy')
-      .preload('replies', (repliesQuery) => {
-        repliesQuery.preload('user').preload('likedBy').orderBy('created_at', 'asc')
+      .preload('replies', (level1Query) => {
+        level1Query
+          .preload('user')
+          .preload('likedBy')
+          .preload('replies', (level2Query) => {
+            level2Query
+              .preload('user')
+              .preload('likedBy')
+              .preload('replies', (level3Query) => {
+                level3Query.preload('user').preload('likedBy').orderBy('created_at', 'asc')
+              })
+              .orderBy('created_at', 'asc')
+          })
+          .orderBy('created_at', 'asc')
       })
       .orderBy('created_at', 'desc')
       .paginate(page, limit)
 
+    // Helper for nested user serialization
+    const userFields = { fields: { pick: ['id', 'username', 'displayName', 'avatar', 'plan'] } }
+    
     const serializedComments = comments.serialize({
       relations: {
-        user: {
-          fields: {
-            pick: ['id', 'username', 'displayName', 'avatar', 'plan'],
-          },
-        },
+        user: userFields,
         replies: {
           relations: {
-            user: {
-              fields: {
-                pick: ['id', 'username', 'displayName', 'avatar', 'plan'],
+            user: userFields,
+            replies: {
+              relations: {
+                user: userFields,
+                replies: {
+                  relations: {
+                    user: userFields,
+                  },
+                },
               },
             },
           },
@@ -122,7 +139,8 @@ export default class ReviewCommentsController {
       })
     }
 
-    // If parentId is provided, verify it exists and enforce 1-level nesting
+    // If parentId is provided, verify it exists and calculate depth
+    let depth = 0
     if (parentId) {
       const parentComment = await ReviewComment.query()
         .where('id', parentId)
@@ -136,11 +154,14 @@ export default class ReviewCommentsController {
         })
       }
 
-      // Enforce 1-level nesting: parent comment must not have a parent itself
-      if (parentComment.parentId !== null) {
-        throw new AppError('Cannot reply to a reply. Only 1 level of nesting is allowed', {
+      // Calculate depth based on parent
+      depth = parentComment.depth + 1
+
+      // Enforce max depth limit (20 levels)
+      if (depth > 20) {
+        throw new AppError('Maximum nesting depth (20) exceeded', {
           status: 400,
-          code: 'NESTED_REPLY_NOT_ALLOWED',
+          code: 'MAX_DEPTH_EXCEEDED',
         })
       }
     }
@@ -163,6 +184,7 @@ export default class ReviewCommentsController {
       parentId: parentId || null,
       content,
       likesCount: 0,
+      depth,
     })
 
     // Add mentions if provided
@@ -348,5 +370,102 @@ export default class ReviewCommentsController {
 
       return response.ok({ message: 'Comment liked successfully', liked: true })
     }
+  }
+
+  /**
+   * Get replies for a specific comment (for lazy loading deeper nesting)
+   * GET /comments/:id/replies
+   */
+  public async replies({ auth, request, response }: HttpContext) {
+    const { id } = request.params()
+    const page = request.input('page', 1)
+    const limit = 20
+
+    // Try to authenticate user (optional for this endpoint)
+    let user = null
+    try {
+      user = await auth.authenticate()
+    } catch {
+      // User not authenticated, continue as guest
+    }
+
+    // Verify comment exists
+    const parentComment = await ReviewComment.find(id)
+    if (!parentComment) {
+      throw new AppError('Comment not found', {
+        status: 404,
+        code: 'COMMENT_NOT_FOUND',
+      })
+    }
+
+    // Get direct replies with 3 levels of nested replies
+    const replies = await ReviewComment.query()
+      .where('parent_id', id)
+      .preload('user')
+      .preload('likedBy')
+      .preload('replies', (level1Query) => {
+        level1Query
+          .preload('user')
+          .preload('likedBy')
+          .preload('replies', (level2Query) => {
+            level2Query
+              .preload('user')
+              .preload('likedBy')
+              .preload('replies', (level3Query) => {
+                level3Query.preload('user').preload('likedBy').orderBy('created_at', 'asc')
+              })
+              .orderBy('created_at', 'asc')
+          })
+          .orderBy('created_at', 'asc')
+      })
+      .orderBy('created_at', 'asc')
+      .paginate(page, limit)
+
+    // Helper for nested user serialization
+    const userFields = { fields: { pick: ['id', 'username', 'displayName', 'avatar', 'plan'] } }
+
+    const serializedReplies = replies.serialize({
+      relations: {
+        user: userFields,
+        replies: {
+          relations: {
+            user: userFields,
+            replies: {
+              relations: {
+                user: userFields,
+                replies: {
+                  relations: {
+                    user: userFields,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+
+    // Enrich with user context (isLikedByMe)
+    const enrichReplies = (repliesArray: any[], repliesModels: ReviewComment[]): any[] => {
+      return repliesArray.map((reply: any) => {
+        const replyModel = repliesModels.find((r) => r.id === reply.id)
+        if (replyModel && user) {
+          reply.isLikedByMe = replyModel.isLikedBy(user.id)
+          if (reply.replies && Array.isArray(reply.replies) && replyModel.replies) {
+            reply.replies = enrichReplies(reply.replies, replyModel.replies)
+          }
+        } else {
+          reply.isLikedByMe = false
+          if (reply.replies && Array.isArray(reply.replies)) {
+            reply.replies = enrichReplies(reply.replies, [])
+          }
+        }
+        return reply
+      })
+    }
+
+    serializedReplies.data = enrichReplies(serializedReplies.data, replies.all())
+
+    return response.ok(serializedReplies)
   }
 }
