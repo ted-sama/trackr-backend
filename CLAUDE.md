@@ -92,33 +92,40 @@ The project uses the following import aliases:
 ## Main Models
 
 ### User
+
 - User authentication and profile
 - Relations: books (tracking), reviews, lists, categories
 
 ### Book
+
 - Book information (title, author, description, etc.)
 - Relations: trackings, reviews, authors, publisher
 
 ### BookTracking
+
 - Reading tracking per user
 - Status: reading, completed, planned, dropped, etc.
 - Progress (pages read, dates)
 
 ### BookReview
+
 - Book reviews and ratings
 - Relations: revisions (modification history)
 
 ### Category
+
 - Custom categories per user
 - Relations: books (many-to-many)
 
 ### List
+
 - Custom reading lists
 - Relations: books (many-to-many)
 
 ## API Routes
 
 ### Authentication (`/auth`)
+
 ```typescript
 POST   /auth/register              # Registration
 POST   /auth/login                 # Login
@@ -129,6 +136,7 @@ GET    /auth/google/callback       # OAuth Callback
 ```
 
 ### Books (`/books`)
+
 ```typescript
 GET    /books                      # List books
 GET    /books/:id                  # Book details
@@ -138,6 +146,7 @@ DELETE /books/:id                  # Delete book
 ```
 
 ### Library (`/library`)
+
 ```typescript
 GET    /library                    # User library
 POST   /library                    # Add to library
@@ -146,6 +155,7 @@ DELETE /library/:id                # Remove from library
 ```
 
 ### Reviews (`/reviews`)
+
 ```typescript
 GET    /reviews                    # List reviews
 GET    /reviews/:id                # Review details
@@ -155,6 +165,7 @@ DELETE /reviews/:id                # Delete review
 ```
 
 ### Categories (`/categories`)
+
 ```typescript
 GET    /categories                 # List categories
 POST   /categories                 # Create category
@@ -163,6 +174,7 @@ DELETE /categories/:id             # Delete category
 ```
 
 ### Lists (`/lists`)
+
 ```typescript
 GET    /lists                      # User lists
 POST   /lists                      # Create list
@@ -171,16 +183,19 @@ DELETE /lists/:id                  # Delete list
 ```
 
 ### Chat/AI (`/chat`)
+
 ```typescript
 POST   /chat                       # AI conversation
 ```
 
 ### Stats (`/stats`)
+
 ```typescript
 GET    /stats                      # User statistics
 ```
 
 ### Recap (`/recap`)
+
 ```typescript
 GET    /recap                      # Reading recap
 ```
@@ -318,21 +333,25 @@ Configuration in `config/swagger.ts`.
 ## Main Services
 
 ### Authentication
+
 - Token management
 - Google OAuth
 - Password reset via email
 
 ### Storage (Cloudflare R2)
+
 - Book cover image uploads
 - User avatar management
 - Pre-signed URLs for access
 
 ### AI (Gemini/OpenRouter)
+
 - Book recommendations
 - Summary generation
 - Conversational chat
 
 ### Cache (Upstash)
+
 - Frequent query caching
 - User sessions
 - Rate limiting
@@ -340,23 +359,27 @@ Configuration in `config/swagger.ts`.
 ## Best Practices
 
 ### Controllers
+
 - Single responsibility per action
 - Validation via VineJS
 - Standardized JSON responses
 - Appropriate error handling
 
 ### Models
+
 - Well-defined Lucid relations
 - Hooks for events (beforeSave, etc.)
 - Serialization to hide sensitive data
 
 ### Middleware
+
 - Authentication
 - Authorization (policies)
 - Input validation
 - Rate limiting
 
 ### Services
+
 - Complex business logic
 - External API interactions
 - Async processing
@@ -411,16 +434,19 @@ docker compose -f docker-compose.prod.yml up -d
 ## Troubleshooting
 
 ### Database connection issues
+
 - Check `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`
 - Ensure PostgreSQL is running
 - Verify credentials in docker-compose.yml
 
 ### Migration failures
+
 - Check database connection
 - Use `--force` in production
 - Rollback if needed: `migration:rollback`
 
 ### Build errors
+
 - Clean: `rm -rf build/`
 - Rebuild: `npm run build`
 - Check types: `npm run typecheck`

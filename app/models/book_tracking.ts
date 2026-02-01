@@ -43,6 +43,9 @@ export default class BookTracking extends BaseModel {
   @column()
   declare rating: number | null
 
+  @column.dateTime()
+  declare ratedAt: DateTime | null
+
   @column.date()
   declare startDate: DateTime | null
 

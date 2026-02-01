@@ -76,10 +76,7 @@ export default class ModerationsController {
       UserStrike.query().where('created_at', '>=', startOfWeek.toSQL()!).count('* as total'),
 
       // Reports by status
-      Report.query()
-        .select('status')
-        .count('* as count')
-        .groupBy('status'),
+      Report.query().select('status').count('* as count').groupBy('status'),
 
       // Reports by priority
       Report.query()
@@ -97,10 +94,7 @@ export default class ModerationsController {
         .limit(5),
 
       // Recent bans (top 5)
-      User.query()
-        .where('is_banned', true)
-        .orderBy('banned_at', 'desc')
-        .limit(5),
+      User.query().where('is_banned', true).orderBy('banned_at', 'desc').limit(5),
     ])
 
     return response.ok({
@@ -156,30 +150,17 @@ export default class ModerationsController {
   public async reportStats({ response }: HttpContext) {
     const [byStatus, byReason, byResourceType, byMonth] = await Promise.all([
       // By status
-      Report.query()
-        .select('status')
-        .count('* as count')
-        .groupBy('status'),
+      Report.query().select('status').count('* as count').groupBy('status'),
 
       // By reason
-      Report.query()
-        .select('reason')
-        .count('* as count')
-        .groupBy('reason'),
+      Report.query().select('reason').count('* as count').groupBy('reason'),
 
       // By resource type
-      Report.query()
-        .select('resource_type')
-        .count('* as count')
-        .groupBy('resource_type'),
+      Report.query().select('resource_type').count('* as count').groupBy('resource_type'),
 
       // Last 6 months trend
       Report.query()
-        .select(
-          this.raw(
-            "to_char(created_at, 'YYYY-MM') as month"
-          )
-        )
+        .select(this.raw("to_char(created_at, 'YYYY-MM') as month"))
         .count('* as count')
         .where('created_at', '>=', DateTime.now().minus({ months: 6 }).toSQL()!)
         .groupByRaw("to_char(created_at, 'YYYY-MM')")
@@ -566,7 +547,12 @@ export default class ModerationsController {
 
     if (data.durationDays) {
       // Temporary ban
-      bannedUntil = await BanService.tempBan(params.userId, data.durationDays, data.reason, admin.id)
+      bannedUntil = await BanService.tempBan(
+        params.userId,
+        data.durationDays,
+        data.reason,
+        admin.id
+      )
       await ModerationNotificationService.notifyAccountBanned(
         params.userId,
         data.durationDays,

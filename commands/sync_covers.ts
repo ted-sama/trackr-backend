@@ -123,7 +123,9 @@ export default class SyncCovers extends BaseCommand {
       }
     }
 
-    this.logger.success(`Cover sync complete: ${synced} synced, ${failed} failed, ${skipped} skipped`)
+    this.logger.success(
+      `Cover sync complete: ${synced} synced, ${failed} failed, ${skipped} skipped`
+    )
   }
 
   private async syncCover(
@@ -165,7 +167,8 @@ export default class SyncCovers extends BaseCommand {
 
       // Determine file extension from Content-Type or URL
       const contentType = response.headers['content-type'] || ''
-      const extension = this.getExtensionFromContentType(contentType) || this.getExtensionFromUrl(coverUrl) || 'jpg'
+      const extension =
+        this.getExtensionFromContentType(contentType) || this.getExtensionFromUrl(coverUrl) || 'jpg'
 
       // Generate unique filename
       const filename = `${cuid()}.${extension}`

@@ -16,10 +16,12 @@ ALTER TABLE book_reviews ADD COLUMN revisions_count INTEGER NOT NULL DEFAULT 0;
 ```
 
 **`rating`**:
+
 - **Type**: `DECIMAL(3,1)` (permet des valeurs comme 7.5, 10.0, etc.)
 - **Nullable**: Oui (pour les reviews existantes)
 
 **`revisionsCount`**:
+
 - **Type**: `INTEGER`
 - **Default**: 0
 - **Description**: Nombre de fois que la review a été révisée
@@ -33,6 +35,7 @@ ALTER TABLE book_review_revisions ADD COLUMN rating DECIMAL(3,1) NULL;
 ```
 
 **`rating`**:
+
 - **Type**: `DECIMAL(3,1)`
 - **Nullable**: Oui
 - **Description**: La note que l'utilisateur avait au moment de cette révision
@@ -76,12 +79,14 @@ Tous les endpoints qui retournent des reviews incluent maintenant les champs `ra
 ### 3. Business Logic
 
 #### Lors de la création d'une review (`POST /books/:bookId/reviews`):
+
 - La `rating` est automatiquement capturée depuis le `BookTracking` de l'utilisateur
 - L'utilisateur DOIT avoir une notation pour créer une review (validation existante)
 - La `rating` est enregistrée avec la review
 - Le `revisionsCount` est initialisé à 0
 
 #### Lors de la mise à jour d'une review (`PATCH /books/:bookId/reviews/:id`):
+
 - L'ancien contenu ET l'ancienne note sont sauvegardés dans une révision
 - La `rating` de la review est mise à jour avec la notation actuelle du `BookTracking`
 - Le `revisionsCount` est incrémenté de 1
@@ -99,7 +104,7 @@ export interface BookReview {
   userId: string
   bookId: number
   content: string
-  rating: number | null  // ⬅️ NOUVEAU
+  rating: number | null // ⬅️ NOUVEAU
   revisionsCount: number // ⬅️ NOUVEAU
   likesCount: number
   isLikedByMe: boolean
@@ -118,7 +123,7 @@ export interface BookReview {
   revisions?: Array<{
     id: number
     content: string
-    rating: number | null  // ⬅️ NOUVEAU - Rating au moment de cette révision
+    rating: number | null // ⬅️ NOUVEAU - Rating au moment de cette révision
     createdAt: string
   }>
 }
@@ -128,7 +133,7 @@ export interface BookReviewRevision {
   id: number
   reviewId: number
   content: string
-  rating: number | null  // Rating que l'user avait à ce moment
+  rating: number | null // Rating que l'user avait à ce moment
   createdAt: string
 }
 ```
@@ -166,11 +171,9 @@ export function ReviewCard({ review }: ReviewCardProps) {
           )}
         </div>
       </div>
-      
-      <div className="review-content">
-        {review.content}
-      </div>
-      
+
+      <div className="review-content">{review.content}</div>
+
       <div className="review-footer">
         <LikeButton review={review} />
         <span className="timestamp">
@@ -186,25 +189,22 @@ export function ReviewCard({ review }: ReviewCardProps) {
 ### Step 3: Handle Rating Display in Different Contexts
 
 #### Option A: Badge Style
+
 ```tsx
-<span className="rating-badge">
-  ⭐ {review.rating}/10
-</span>
+<span className="rating-badge">⭐ {review.rating}/10</span>
 ```
 
 #### Option B: Stars Visualization
+
 ```tsx
 function RatingDisplay({ rating }: { rating: number }) {
   const filledStars = Math.floor(rating / 2) // Convert 0-10 to 0-5
   const hasHalfStar = (rating / 2) % 1 >= 0.5
-  
+
   return (
     <div className="rating-stars">
       {[...Array(5)].map((_, i) => (
-        <Star
-          key={i}
-          className={i < filledStars ? 'filled' : 'empty'}
-        />
+        <Star key={i} className={i < filledStars ? 'filled' : 'empty'} />
       ))}
       {hasHalfStar && <StarHalf className="half-filled" />}
       <span className="rating-text">{rating}/10</span>
@@ -214,6 +214,7 @@ function RatingDisplay({ rating }: { rating: number }) {
 ```
 
 #### Option C: Compact Inline Display
+
 ```tsx
 <div className="review-header">
   <span className="username">{review.user.displayName}</span>
@@ -233,7 +234,7 @@ function ReviewRating({ rating }: { rating: number | null }) {
   if (!rating) {
     return null // Ne rien afficher pour les anciennes reviews
   }
-  
+
   return (
     <div className="review-rating">
       <Star className="w-4 h-4" />
@@ -250,26 +251,24 @@ Si vous affichez la notation dans le formulaire de création/édition:
 ```tsx
 function ReviewForm({ bookId, existingReview }: ReviewFormProps) {
   const { data: tracking } = useBookTracking(bookId)
-  
+
   return (
     <form>
       {tracking?.rating && (
         <div className="form-info">
-          <p>Your current rating: <strong>{tracking.rating}/10</strong></p>
-          <p className="text-sm text-gray-500">
-            This rating will be saved with your review
+          <p>
+            Your current rating: <strong>{tracking.rating}/10</strong>
           </p>
+          <p className="text-sm text-gray-500">This rating will be saved with your review</p>
         </div>
       )}
-      
+
       <textarea
         placeholder="Write your review..."
         // ...
       />
-      
-      <button type="submit">
-        {existingReview ? 'Update Review' : 'Publish Review'}
-      </button>
+
+      <button type="submit">{existingReview ? 'Update Review' : 'Publish Review'}</button>
     </form>
   )
 }
@@ -305,25 +304,20 @@ function ReviewCard({ review }: ReviewCardProps) {
 ```tsx
 function ReviewCard({ review }: ReviewCardProps) {
   const [showRevisions, setShowRevisions] = useState(false)
-  
+
   return (
     <div className="review-card">
       {/* ... header and content ... */}
       <div className="review-footer">
         <LikeButton review={review} />
         {review.revisionsCount > 0 && (
-          <button
-            onClick={() => setShowRevisions(!showRevisions)}
-            className="revisions-button"
-          >
+          <button onClick={() => setShowRevisions(!showRevisions)} className="revisions-button">
             View {review.revisionsCount} {review.revisionsCount === 1 ? 'revision' : 'revisions'}
           </button>
         )}
       </div>
-      
-      {showRevisions && review.revisions && (
-        <RevisionHistory revisions={review.revisions} />
-      )}
+
+      {showRevisions && review.revisions && <RevisionHistory revisions={review.revisions} />}
     </div>
   )
 }
@@ -337,8 +331,11 @@ Si vous affichez l'historique des révisions complet:
 function ReviewRevisionHistory({ review }: { review: BookReview }) {
   return (
     <div className="revision-history">
-      <h3>Revision History ({review.revisionsCount} {review.revisionsCount === 1 ? 'revision' : 'revisions'})</h3>
-      
+      <h3>
+        Revision History ({review.revisionsCount}{' '}
+        {review.revisionsCount === 1 ? 'revision' : 'revisions'})
+      </h3>
+
       {/* Version actuelle */}
       <div className="current-version">
         <div className="revision-header">
@@ -346,9 +343,7 @@ function ReviewRevisionHistory({ review }: { review: BookReview }) {
           <span>{formatDate(review.updatedAt)}</span>
           {review.rating && <span className="rating">⭐ {review.rating}/10</span>}
         </div>
-        <div className="revision-content">
-          {review.content}
-        </div>
+        <div className="revision-content">{review.content}</div>
       </div>
       {/* Versions précédentes avec leur rating */}
       {review.revisions?.map((revision, index) => (
@@ -358,9 +353,7 @@ function ReviewRevisionHistory({ review }: { review: BookReview }) {
             <span>{formatDate(revision.createdAt)}</span>
             {revision.rating && <span className="rating">⭐ {revision.rating}/10</span>}
           </div>
-          <div className="revision-content">
-            {revision.content}
-          </div>
+          <div className="revision-content">{revision.content}</div>
           {/* Afficher si le rating a changé par rapport à la version suivante */}
           {index > 0 && revision.rating !== review.revisions[index - 1]?.rating && (
             <span className="rating-changed-badge">Rating changed</span>
@@ -377,12 +370,18 @@ function ReviewRevisionHistory({ review }: { review: BookReview }) {
 Vous pouvez mettre en évidence les changements de rating :
 
 ```tsx
-function RatingChange({ oldRating, newRating }: { oldRating: number | null, newRating: number | null }) {
+function RatingChange({
+  oldRating,
+  newRating,
+}: {
+  oldRating: number | null
+  newRating: number | null
+}) {
   if (oldRating === newRating) return null
-  
+
   const diff = (newRating ?? 0) - (oldRating ?? 0)
   const isIncrease = diff > 0
-  
+
   return (
     <span className={`rating-change ${isIncrease ? 'text-green-500' : 'text-red-500'}`}>
       {isIncrease ? '↑' : '↓'} {Math.abs(diff).toFixed(1)}
@@ -419,7 +418,8 @@ Pour afficher le nombre de révisions de manière discrète:
   </Tooltip>
 </TooltipProvider>
 ```
-```
+
+````
 
 ## 🎯 UX Recommendations
 
@@ -449,9 +449,10 @@ Pour afficher le nombre de révisions de manière discrète:
 {review.revisionsCount > 0 && (
   <span className="edited-badge">Edited</span>
 )}
-```
+````
 
 ### 4. **Mobile Responsiveness**
+
 ```tsx
 // Desktop: Rating à côté du username
 <div className="flex items-center gap-2">
@@ -468,25 +469,29 @@ Pour afficher le nombre de révisions de manière discrète:
 ```
 
 ### 5. **Accessibility**
+
 ```tsx
-<div className="review-rating" aria-label={`Rating: ${rating} out of 10`}>
+;<div className="review-rating" aria-label={`Rating: ${rating} out of 10`}>
   <Star aria-hidden="true" />
   <span>{rating}/10</span>
 </div>
 
-{review.revisionsCount > 0 && (
-  <span 
-    className="edited-badge"
-    aria-label={`This review has been edited ${review.revisionsCount} time(s)`}
-  >
-    Edited
-  </span>
-)}
+{
+  review.revisionsCount > 0 && (
+    <span
+      className="edited-badge"
+      aria-label={`This review has been edited ${review.revisionsCount} time(s)`}
+    >
+      Edited
+    </span>
+  )
+}
 ```
 
 ## 🔍 Testing Checklist
 
 ### Rating
+
 - [ ] Les nouvelles reviews affichent correctement la notation
 - [ ] Les reviews mises à jour affichent la notation actualisée
 - [ ] Les anciennes reviews (rating = null) ne causent pas d'erreur
@@ -497,6 +502,7 @@ Pour afficher le nombre de révisions de manière discrète:
 - [ ] Un rating de 10.0 est correctement affiché
 
 ### Revisions Count
+
 - [ ] Les nouvelles reviews affichent `revisionsCount: 0`
 - [ ] Le compteur s'incrémente correctement après chaque mise à jour
 - [ ] Le badge "Edited" apparaît seulement quand `revisionsCount > 0`
@@ -524,36 +530,42 @@ Pour afficher le nombre de révisions de manière discrète:
 
 ```tsx
 // Simple badge
-{review.revisionsCount > 0 && (
-  <span className="text-xs text-gray-500 italic">
-    Edited {review.revisionsCount > 1 ? `${review.revisionsCount}x` : ''}
-  </span>
-)}
+{
+  review.revisionsCount > 0 && (
+    <span className="text-xs text-gray-500 italic">
+      Edited {review.revisionsCount > 1 ? `${review.revisionsCount}x` : ''}
+    </span>
+  )
+}
 ```
 
 ```tsx
 // Subtle badge
-{review.revisionsCount > 0 && (
-  <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
-    <Edit2 className="w-3 h-3" />
-    <span>Edited</span>
-  </div>
-)}
+{
+  review.revisionsCount > 0 && (
+    <div className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs">
+      <Edit2 className="w-3 h-3" />
+      <span>Edited</span>
+    </div>
+  )
+}
 ```
 
 ## 🚀 Migration Notes
 
 ### Backend Migration
+
 ```bash
 # Run the migration
 node ace migration:run
 ```
 
 ### Frontend Migration
+
 - **Breaking Change**: Non (les champs `rating` et `revisionsCount` sont ajoutés, pas de suppression)
 - **Backward Compatible**: Oui (rating peut être null, revisionsCount est 0 par défaut)
 - **Required Changes**: Mettre à jour les types TypeScript
-- **Optional Changes**: 
+- **Optional Changes**:
   - Afficher la notation dans l'UI
   - Afficher le badge "Edited" pour les reviews révisées
   - Afficher le nombre de révisions
@@ -561,6 +573,7 @@ node ace migration:run
 ## 📞 Support
 
 Pour toute question sur cette feature:
+
 - Backend: Vérifier `app/controllers/reviews_controller.ts`
 - Database: Migration `1765579206662_create_add_rating_to_book_reviews_table.ts`
 - Model: `app/models/book_review.ts`
@@ -570,4 +583,3 @@ Pour toute question sur cette feature:
 - BookTracking rating system
 - Review revisions history
 - User profile reviews list
-

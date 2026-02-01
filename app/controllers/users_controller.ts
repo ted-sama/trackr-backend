@@ -337,7 +337,8 @@ export default class UsersController {
       if (statsVisibility !== undefined) privacyUpdates.statsVisibility = statsVisibility
       if (activityVisibility !== undefined) privacyUpdates.activityVisibility = activityVisibility
       if (libraryVisibility !== undefined) privacyUpdates.libraryVisibility = libraryVisibility
-      if (connectionsVisibility !== undefined) privacyUpdates.connectionsVisibility = connectionsVisibility
+      if (connectionsVisibility !== undefined)
+        privacyUpdates.connectionsVisibility = connectionsVisibility
 
       user.setPrivacyPreferences(privacyUpdates)
     }
@@ -733,7 +734,13 @@ export default class UsersController {
    */
   async updateNotificationSettings({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
-    const { notifyReviewLikes, notifyListLikes, notifyListSaves, notifyNewFollower, notifyNewFriend } = request.only([
+    const {
+      notifyReviewLikes,
+      notifyListLikes,
+      notifyListSaves,
+      notifyNewFollower,
+      notifyNewFriend,
+    } = request.only([
       'notifyReviewLikes',
       'notifyListLikes',
       'notifyListSaves',
@@ -894,11 +901,7 @@ export default class UsersController {
       query.preload('authors').preload('publishers')
     })
 
-    const tracking = await user
-      .related('bookTrackings')
-      .query()
-      .where('book_id', bookId)
-      .first()
+    const tracking = await user.related('bookTrackings').query().where('book_id', bookId).first()
 
     return response.created({
       book: user.pinnedBook,

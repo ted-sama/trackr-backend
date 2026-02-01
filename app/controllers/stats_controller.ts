@@ -71,12 +71,12 @@ export default class StatsController {
     }
 
     // Check if current user is the owner (to allow viewing own private stats)
-    const currentUser = await auth.check() ? auth.user : null
+    const currentUser = (await auth.check()) ? auth.user : null
     const isOwner = currentUser?.id === user.id
 
     // Check if stats are private and requester is not the owner
     if (!user.isStatsPublic && !isOwner) {
-      throw new AppError('This user\'s statistics are private', {
+      throw new AppError("This user's statistics are private", {
         status: 403,
         code: 'STATS_PRIVATE',
       })
@@ -163,11 +163,11 @@ export default class StatsController {
       return response.notFound({ message: 'User not found' })
     }
 
-    const currentUser = await auth.check() ? auth.user : null
+    const currentUser = (await auth.check()) ? auth.user : null
     const isOwner = currentUser?.id === user.id
 
     if (!user.isStatsPublic && !isOwner) {
-      throw new AppError('This user\'s statistics are private', {
+      throw new AppError("This user's statistics are private", {
         status: 403,
         code: 'STATS_PRIVATE',
       })
@@ -191,13 +191,18 @@ export default class StatsController {
     return response.ok({ data: books })
   }
 
-  private async getBooksByFilter(userId: string, chartType: string, filterValue: string): Promise<Book[]> {
+  private async getBooksByFilter(
+    userId: string,
+    chartType: string,
+    filterValue: string
+  ): Promise<Book[]> {
     // Helper to create a fresh query each time (Lucid queries are mutable)
-    const createBaseQuery = () => BookTracking.query()
-      .where('user_id', userId)
-      .preload('book', (bookQuery) => {
-        bookQuery.preload('authors').preload('publishers')
-      })
+    const createBaseQuery = () =>
+      BookTracking.query()
+        .where('user_id', userId)
+        .preload('book', (bookQuery) => {
+          bookQuery.preload('authors').preload('publishers')
+        })
 
     let trackings: BookTracking[]
 
@@ -205,26 +210,22 @@ export default class StatsController {
       case 'genre':
         // Filter by genre (genres is a JSON array in books table)
         // Cast to jsonb since genres column is json type and @> operator requires jsonb
-        trackings = await createBaseQuery()
-          .whereHas('book', (bookQuery) => {
-            bookQuery.whereRaw('genres::jsonb @> ?::jsonb', [JSON.stringify([filterValue])])
-          })
+        trackings = await createBaseQuery().whereHas('book', (bookQuery) => {
+          bookQuery.whereRaw('genres::jsonb @> ?::jsonb', [JSON.stringify([filterValue])])
+        })
         break
 
       case 'type':
         // Filter by book type (manga, manhwa, etc.)
-        trackings = await createBaseQuery()
-          .whereHas('book', (bookQuery) => {
-            bookQuery.whereILike('type', filterValue)
-          })
+        trackings = await createBaseQuery().whereHas('book', (bookQuery) => {
+          bookQuery.whereILike('type', filterValue)
+        })
         break
 
       case 'rating':
         // Filter by user rating (exact match)
         const ratingValue = parseFloat(filterValue)
-        trackings = await createBaseQuery()
-          .whereNotNull('rating')
-          .where('rating', ratingValue)
+        trackings = await createBaseQuery().whereNotNull('rating').where('rating', ratingValue)
         break
 
       case 'series':
@@ -253,12 +254,11 @@ export default class StatsController {
 
       case 'author':
         // Filter by author name
-        trackings = await createBaseQuery()
-          .whereHas('book', (bookQuery) => {
-            bookQuery.whereHas('authors', (authorQuery) => {
-              authorQuery.whereILike('name', filterValue)
-            })
+        trackings = await createBaseQuery().whereHas('book', (bookQuery) => {
+          bookQuery.whereHas('authors', (authorQuery) => {
+            authorQuery.whereILike('name', filterValue)
           })
+        })
         break
 
       default:

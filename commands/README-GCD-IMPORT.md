@@ -5,6 +5,7 @@ Script pour importer les comics depuis la base de données GCD dans Trackr.
 ## Prérequis
 
 1. **Télécharger la base de données GCD**
+
    - Créer un compte sur https://www.comics.org/
    - Aller sur https://www.comics.org/download/
    - Télécharger le dump **SQLite** (fichier `.gz`)
@@ -95,21 +96,21 @@ node ace import:gcd --covers-only --skip=500
 
 ## Flags disponibles
 
-| Flag | Description |
-|------|-------------|
-| `--limit <n>` | Limite le nombre de comics à importer |
-| `--db-url <url>` | URL directe pour télécharger la DB (.gz ou .db) |
-| `--scrape-covers` | Scrape les covers après l'import |
-| `--covers-only` | Mode covers uniquement (skip l'import) |
-| `--delay <ms>` | Délai entre les requêtes de scraping (défaut: 3000) |
-| `--skip <n>` | Skip les N premiers livres (pour reprendre le scraping) |
+| Flag              | Description                                             |
+| ----------------- | ------------------------------------------------------- |
+| `--limit <n>`     | Limite le nombre de comics à importer                   |
+| `--db-url <url>`  | URL directe pour télécharger la DB (.gz ou .db)         |
+| `--scrape-covers` | Scrape les covers après l'import                        |
+| `--covers-only`   | Mode covers uniquement (skip l'import)                  |
+| `--delay <ms>`    | Délai entre les requêtes de scraping (défaut: 3000)     |
+| `--skip <n>`      | Skip les N premiers livres (pour reprendre le scraping) |
 
 ## Variables d'environnement
 
-| Variable | Description | Défaut |
-|----------|-------------|--------|
-| `GCD_DB_PATH` | Chemin vers la base de données SQLite | `/tmp/gcd-data/gcd.db` |
-| `GCD_DOWNLOAD_DIR` | Dossier de téléchargement | `/tmp/gcd-data` |
+| Variable           | Description                           | Défaut                 |
+| ------------------ | ------------------------------------- | ---------------------- |
+| `GCD_DB_PATH`      | Chemin vers la base de données SQLite | `/tmp/gcd-data/gcd.db` |
+| `GCD_DOWNLOAD_DIR` | Dossier de téléchargement             | `/tmp/gcd-data`        |
 
 ## Ce que fait le script
 
@@ -137,12 +138,14 @@ node ace fix:duplicate-comics
 ```
 
 Cette commande :
+
 - Met `chapters = null` pour les comics en cours
 - Ajoute l'année aux titres dupliqués
 
 ## Publishers importés
 
 Le script importe uniquement ces éditeurs :
+
 - Marvel Comics (54)
 - DC Comics (78)
 - Image Comics (709)
@@ -153,4 +156,3 @@ Le script importe uniquement ces éditeurs :
 - Vertigo (370)
 - Aftershock Comics (17792)
 - Valiant Comics (674)
-

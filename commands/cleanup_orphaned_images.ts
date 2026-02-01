@@ -6,13 +6,16 @@ import ImageStorageService from '#services/image_storage_service'
 
 export default class CleanupOrphanedImages extends BaseCommand {
   static commandName = 'cleanup:orphaned-images'
-  static description = 'Clean up orphaned images from R2 storage that are no longer referenced in the database'
+  static description =
+    'Clean up orphaned images from R2 storage that are no longer referenced in the database'
 
   static options: CommandOptions = {
     startApp: true,
   }
 
-  @flags.boolean({ description: 'Run in dry-run mode (show what would be deleted without actually deleting)' })
+  @flags.boolean({
+    description: 'Run in dry-run mode (show what would be deleted without actually deleting)',
+  })
   declare dryRun: boolean
 
   @flags.boolean({ description: 'Verbose output' })
@@ -30,9 +33,7 @@ export default class CleanupOrphanedImages extends BaseCommand {
 
     // User avatars
     this.logger.info('Collecting user avatar URLs...')
-    const usersWithAvatars = await User.query()
-      .whereNotNull('avatar')
-      .select('avatar')
+    const usersWithAvatars = await User.query().whereNotNull('avatar').select('avatar')
     for (const user of usersWithAvatars) {
       if (user.avatar) {
         activeUrls.add(user.avatar)
@@ -67,11 +68,7 @@ export default class CleanupOrphanedImages extends BaseCommand {
     this.logger.info(`Total active images in database: ${activeUrls.size}`)
 
     // List all files in R2 storage directories
-    const directories = [
-      'images/user/avatar',
-      'images/user/backdrop',
-      'images/list/backdrop',
-    ]
+    const directories = ['images/user/avatar', 'images/user/backdrop', 'images/list/backdrop']
 
     let totalOrphaned = 0
     let totalDeleted = 0

@@ -135,4 +135,3 @@ export default class FixDuplicateComics extends BaseCommand {
     }
   }
 }
-

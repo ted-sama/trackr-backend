@@ -103,8 +103,14 @@ export default class FeedService {
     const recentTrackings = await BookTracking.query()
       .whereIn('user_id', followingIds)
       .whereNotNull('rating')
-      .where('updated_at', '>=', cutoffDate!)
-      .orderBy('updated_at', 'desc')
+      .where((query) => {
+        // Filter by rated_at if available, otherwise fallback to updated_at for backward compatibility
+        query.where('rated_at', '>=', cutoffDate!).orWhere((subquery) => {
+          subquery.whereNull('rated_at').where('updated_at', '>=', cutoffDate!)
+        })
+      })
+      // Use COALESCE to sort by rated_at if available, otherwise updated_at
+      .orderByRaw('COALESCE(rated_at, updated_at) DESC')
       .limit(limit)
       .preload('user')
       .preload('book', (bookQuery) => {
@@ -155,7 +161,7 @@ export default class FeedService {
         rating: tracking.rating!,
         hasReview: reviewId !== null,
         reviewId,
-        ratedAt: tracking.updatedAt,
+        ratedAt: tracking.ratedAt ?? tracking.updatedAt,
       }
     })
   }

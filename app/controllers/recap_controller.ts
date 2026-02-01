@@ -47,7 +47,11 @@ export default class RecapController {
       }
 
       // Verify book exists
-      const book = await Book.query().where('id', bookId).preload('authors').preload('publishers').first()
+      const book = await Book.query()
+        .where('id', bookId)
+        .preload('authors')
+        .preload('publishers')
+        .first()
       if (!book) {
         return response.notFound({ message: 'Book not found' })
       }
@@ -159,7 +163,6 @@ RÈGLES:
         cached: false,
         availableAt: null,
       } satisfies RecapResponse)
-
     } catch (error) {
       console.error('Recap generation error:', error)
       return response.internalServerError({
