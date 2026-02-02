@@ -18,16 +18,11 @@
  * running the same task multiple times.
  */
 
-import env from '#start/env'
-import logger from '@adonisjs/core/services/logger'
-import DatabaseMaintenanceService from '#services/database_maintenance_service'
+import app from '@adonisjs/core/services/app'
 
 // Time constants
 const MINUTE = 60 * 1000
 const HOUR = 60 * MINUTE
-
-// Configuration
-const SCHEDULER_ENABLED = env.get('SCHEDULER_ENABLED', 'false') === 'true'
 
 // Schedule configuration (in hours from midnight UTC)
 const DAILY_MAINTENANCE_HOUR = 3 // 3:00 AM UTC
@@ -125,11 +120,16 @@ function shouldRunMonthly(): boolean {
  */
 async function runScheduledMaintenance() {
   if (state.isRunning) {
-    logger.debug('[Scheduler] Maintenance already running, skipping...')
     return
   }
 
   state.isRunning = true
+
+  // Dynamic import to avoid loading before app is ready
+  const { default: logger } = await import('@adonisjs/core/services/logger')
+  const { default: DatabaseMaintenanceService } = await import(
+    '#services/database_maintenance_service'
+  )
 
   try {
     // Monthly includes weekly and daily
@@ -183,33 +183,36 @@ async function runScheduledMaintenance() {
 }
 
 /**
- * Initialize the scheduler
+ * Initialize the scheduler after the app is ready
  */
-function initScheduler() {
-  if (!SCHEDULER_ENABLED) {
-    logger.info('[Scheduler] Database maintenance scheduler is DISABLED')
-    logger.info('[Scheduler] Set SCHEDULER_ENABLED=true in .env to enable')
-    logger.info('[Scheduler] Or use external cron: node ace db:maintenance --schedule=daily')
-    return
+app.ready(async () => {
+  // Only run scheduler in web environment (not during CLI commands)
+  if (!app.getEnvironment() || app.getEnvironment() === 'web') {
+    const { default: logger } = await import('@adonisjs/core/services/logger')
+    const schedulerEnabled = process.env.SCHEDULER_ENABLED === 'true'
+
+    if (!schedulerEnabled) {
+      logger.info('[Scheduler] Database maintenance scheduler is DISABLED')
+      logger.info('[Scheduler] Set SCHEDULER_ENABLED=true in .env to enable')
+      logger.info('[Scheduler] Or use external cron: node ace db:maintenance --schedule=daily')
+      return
+    }
+
+    logger.info('[Scheduler] Database maintenance scheduler is ENABLED')
+    logger.info(`[Scheduler] Daily maintenance scheduled at ${DAILY_MAINTENANCE_HOUR}:00 UTC`)
+    logger.info(
+      `[Scheduler] Weekly maintenance scheduled on Sunday at ${DAILY_MAINTENANCE_HOUR}:00 UTC`
+    )
+    logger.info(
+      `[Scheduler] Monthly maintenance scheduled on 1st at ${DAILY_MAINTENANCE_HOUR}:00 UTC`
+    )
+
+    // Check every 30 minutes
+    setInterval(runScheduledMaintenance, 30 * MINUTE)
+
+    // Run initial check after 1 minute (to let everything stabilize)
+    setTimeout(runScheduledMaintenance, MINUTE)
   }
-
-  logger.info('[Scheduler] Database maintenance scheduler is ENABLED')
-  logger.info(`[Scheduler] Daily maintenance scheduled at ${DAILY_MAINTENANCE_HOUR}:00 UTC`)
-  logger.info(
-    `[Scheduler] Weekly maintenance scheduled on Sunday at ${DAILY_MAINTENANCE_HOUR}:00 UTC`
-  )
-  logger.info(
-    `[Scheduler] Monthly maintenance scheduled on 1st at ${DAILY_MAINTENANCE_HOUR}:00 UTC`
-  )
-
-  // Check every 30 minutes
-  setInterval(runScheduledMaintenance, 30 * MINUTE)
-
-  // Run initial check after 1 minute (to let the app fully start)
-  setTimeout(runScheduledMaintenance, MINUTE)
-}
-
-// Initialize when this file is loaded
-initScheduler()
+})
 
 export { runScheduledMaintenance, state as schedulerState }
