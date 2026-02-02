@@ -5,12 +5,14 @@ import drive from '@adonisjs/drive/services/main'
 import env from '#start/env'
 import axios from 'axios'
 import { cuid } from '@adonisjs/core/helpers'
+import sharp from 'sharp'
 
 const DEFAULT_DELAY_MS = 500
 
 export default class SyncCovers extends BaseCommand {
   static commandName = 'sync:covers'
-  static description = 'Download external cover images and upload them to R2 storage'
+  static description =
+    'Download external cover images, convert to WebP, and upload them to R2 storage'
 
   static options: CommandOptions = {
     startApp: true,
@@ -31,6 +33,12 @@ export default class SyncCovers extends BaseCommand {
   @flags.boolean({ description: 'Dry run mode - show what would be done without making changes' })
   declare dryRun: boolean
 
+  @flags.boolean({
+    description: 'Only sync popular books (in libraries, with reviews, or tracked)',
+    alias: 'p',
+  })
+  declare popularOnly: boolean
+
   private downloadDelay = DEFAULT_DELAY_MS
 
   async run() {
@@ -46,10 +54,10 @@ export default class SyncCovers extends BaseCommand {
     const normalizedR2Url = r2PublicUrl.endsWith('/') ? r2PublicUrl.slice(0, -1) : r2PublicUrl
 
     if (this.dryRun) {
-      this.logger.info('🔍 DRY RUN MODE - No changes will be made')
+      this.logger.info('DRY RUN MODE - No changes will be made')
     }
 
-    this.logger.info('Starting cover sync to R2...')
+    this.logger.info('Starting cover sync to R2 (WebP conversion enabled)...')
     this.logger.info(`Download delay: ${this.downloadDelay}ms`)
 
     // Build query for books with external cover URLs
@@ -61,6 +69,21 @@ export default class SyncCovers extends BaseCommand {
       // Exclude covers already on R2
       .whereNot('cover_image', 'like', `${normalizedR2Url}%`)
       .orderBy('id', 'asc')
+
+    // Filter for popular books only
+    if (this.popularOnly) {
+      query.where((builder) => {
+        builder
+          .whereExists((subQuery) => {
+            subQuery.from('library_books as lb').whereRaw('lb.book_id = books.id')
+          })
+          .orWhereExists((subQuery) => {
+            subQuery.from('book_reviews as br').whereRaw('br.book_id = books.id')
+          })
+          .orWhere('tracking_count', '>', 0)
+      })
+      this.logger.info('Filtering: popular books only (in libraries, with reviews, or tracked)')
+    }
 
     if (this.dataSource) {
       query.where('data_source', this.dataSource)
@@ -96,12 +119,12 @@ export default class SyncCovers extends BaseCommand {
 
         if (result === 'synced') {
           synced++
-          this.logger.info(`✓ [${synced}/${books.length}] ${book.title}`)
+          this.logger.info(`[${synced}/${books.length}] ${book.title}`)
         } else if (result === 'skipped') {
           skipped++
         } else {
           failed++
-          this.logger.warning(`⚠ [${synced + failed}/${books.length}] ${book.title}: ${result}`)
+          this.logger.warning(`[${synced + failed}/${books.length}] ${book.title}: ${result}`)
         }
 
         // Progress update every 10 books
@@ -163,21 +186,19 @@ export default class SyncCovers extends BaseCommand {
         maxRedirects: 5,
       })
 
-      const buffer = Buffer.from(response.data)
+      const inputBuffer = Buffer.from(response.data)
 
-      // Determine file extension from Content-Type or URL
-      const contentType = response.headers['content-type'] || ''
-      const extension =
-        this.getExtensionFromContentType(contentType) || this.getExtensionFromUrl(coverUrl) || 'jpg'
+      // Convert to WebP using sharp
+      const webpBuffer = await sharp(inputBuffer).webp({ quality: 85 }).toBuffer()
 
-      // Generate unique filename
-      const filename = `${cuid()}.${extension}`
+      // Generate unique filename (always .webp now)
+      const filename = `${cuid()}.webp`
       const key = `images/book/cover/${filename}`
 
       // Upload to R2
       const disk = drive.use('s3')
-      await disk.put(key, buffer, {
-        contentType: contentType || `image/${extension}`,
+      await disk.put(key, webpBuffer, {
+        contentType: 'image/webp',
       })
 
       // Build new URL
@@ -223,27 +244,6 @@ export default class SyncCovers extends BaseCommand {
       default:
         return ''
     }
-  }
-
-  private getExtensionFromContentType(contentType: string): string | null {
-    const mapping: Record<string, string> = {
-      'image/jpeg': 'jpg',
-      'image/jpg': 'jpg',
-      'image/png': 'png',
-      'image/gif': 'gif',
-      'image/webp': 'webp',
-      'image/avif': 'avif',
-    }
-    return mapping[contentType.toLowerCase().split(';')[0].trim()] || null
-  }
-
-  private getExtensionFromUrl(url: string): string | null {
-    const match = url.match(/\.([a-zA-Z0-9]+)(?:\?.*)?$/)
-    if (!match) return null
-
-    const ext = match[1].toLowerCase()
-    const validExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif']
-    return validExtensions.includes(ext) ? (ext === 'jpeg' ? 'jpg' : ext) : null
   }
 
   private sleep(ms: number): Promise<void> {

@@ -246,12 +246,15 @@ const updateStatement = `
            ELSE COALESCE($2, cover_image)
          END,
          type = $3,
-         rating = $4,
+         rating = rating,
          genres = $5,
          release_year = $6,
          end_year = $7,
          description = $8,
-         description_fr = $9,
+         description_fr = CASE
+           WHEN $8 IS NOT DISTINCT FROM description THEN description_fr
+           ELSE NULL
+         END,
          status = $10,
          volumes = $11,
          chapters = $12,
