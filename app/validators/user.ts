@@ -21,9 +21,13 @@ export const updateSchema = vine.compile(
     isLibraryPublic: vine.boolean().optional(),
     // New granular visibility fields
     statsVisibility: vine.enum(['public', 'followers', 'friends', 'private'] as const).optional(),
-    activityVisibility: vine.enum(['public', 'followers', 'friends', 'private'] as const).optional(),
+    activityVisibility: vine
+      .enum(['public', 'followers', 'friends', 'private'] as const)
+      .optional(),
     libraryVisibility: vine.enum(['public', 'followers', 'friends', 'private'] as const).optional(),
-    connectionsVisibility: vine.enum(['public', 'followers', 'friends', 'private'] as const).optional(),
+    connectionsVisibility: vine
+      .enum(['public', 'followers', 'friends', 'private'] as const)
+      .optional(),
   })
 )
 

@@ -423,20 +423,25 @@ export default class User extends compose(BaseModel, AuthFinder) {
   static async validateContent(user: User) {
     // Validate username (reject if offensive)
     if (user.$dirty.username) {
-      const usernameCheck = AdvancedContentFilterService.validateAndCensor(user.username, 'username', {
-        autoReject: true,
-        autoCensor: false,
-      })
+      const usernameCheck = AdvancedContentFilterService.validateAndCensor(
+        user.username,
+        'username',
+        {
+          autoReject: true,
+          autoCensor: false,
+        }
+      )
       if (!usernameCheck.isValid) {
-        const reasonMessage = usernameCheck.reason === 'profanity'
-          ? 'contains inappropriate language'
-          : usernameCheck.reason === 'hate_speech'
-            ? 'contains hateful content'
-            : 'violates our content policy'
-        throw new AppError(
-          `Username ${reasonMessage}. Please choose a different username.`,
-          { status: 400, code: 'CONTENT_POLICY_VIOLATION' }
-        )
+        const reasonMessage =
+          usernameCheck.reason === 'profanity'
+            ? 'contains inappropriate language'
+            : usernameCheck.reason === 'hate_speech'
+              ? 'contains hateful content'
+              : 'violates our content policy'
+        throw new AppError(`Username ${reasonMessage}. Please choose a different username.`, {
+          status: 400,
+          code: 'CONTENT_POLICY_VIOLATION',
+        })
       }
     }
 

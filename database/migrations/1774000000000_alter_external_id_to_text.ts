@@ -11,7 +11,9 @@ export default class extends BaseSchema {
     })
 
     this.defer(async (db) => {
-      await db.rawQuery('UPDATE books SET external_id_new = external_id::text WHERE external_id IS NOT NULL')
+      await db.rawQuery(
+        'UPDATE books SET external_id_new = external_id::text WHERE external_id IS NOT NULL'
+      )
     })
 
     this.schema.alterTable(this.tableName, (table) => {
@@ -28,7 +30,9 @@ export default class extends BaseSchema {
     })
 
     this.defer(async (db) => {
-      await db.rawQuery('UPDATE publishers SET external_id_pub_new = external_id::text WHERE external_id IS NOT NULL')
+      await db.rawQuery(
+        'UPDATE publishers SET external_id_pub_new = external_id::text WHERE external_id IS NOT NULL'
+      )
     })
 
     this.schema.alterTable('publishers', (table) => {
@@ -47,7 +51,9 @@ export default class extends BaseSchema {
     })
 
     this.defer(async (db) => {
-      await db.rawQuery('UPDATE books SET external_id_old = external_id::integer WHERE external_id ~ \'^[0-9]+$\'')
+      await db.rawQuery(
+        "UPDATE books SET external_id_old = external_id::integer WHERE external_id ~ '^[0-9]+$'"
+      )
     })
 
     this.schema.alterTable(this.tableName, (table) => {
@@ -64,7 +70,9 @@ export default class extends BaseSchema {
     })
 
     this.defer(async (db) => {
-      await db.rawQuery('UPDATE publishers SET external_id_old = external_id::integer WHERE external_id ~ \'^[0-9]+$\'')
+      await db.rawQuery(
+        "UPDATE publishers SET external_id_old = external_id::integer WHERE external_id ~ '^[0-9]+$'"
+      )
     })
 
     this.schema.alterTable('publishers', (table) => {

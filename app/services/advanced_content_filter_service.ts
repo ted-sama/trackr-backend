@@ -131,7 +131,7 @@ const LEETSPEAK_MAP: Record<string, string> = {
   '8': 'b',
   '9': 'g',
   '@': 'a',
-  $: 's',
+  '$': 's',
   '!': 'i',
   '|': 'i',
   '+': 't',
@@ -184,7 +184,10 @@ export default class AdvancedContentFilterService {
 
     // Remove spacing tricks (f.u.c.k -> fuck, f u c k -> fuck)
     // Only for short segments to avoid false positives
-    normalized = normalized.replace(/\b([a-z])[\s.]+([a-z])[\s.]+([a-z])[\s.]+([a-z])\b/gi, '$1$2$3$4')
+    normalized = normalized.replace(
+      /\b([a-z])[\s.]+([a-z])[\s.]+([a-z])[\s.]+([a-z])\b/gi,
+      '$1$2$3$4'
+    )
     normalized = normalized.replace(/\b([a-z])[\s.]+([a-z])[\s.]+([a-z])\b/gi, '$1$2$3')
 
     return normalized.toLowerCase()

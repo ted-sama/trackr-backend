@@ -7,7 +7,13 @@ export default class extends BaseSchema {
     this.schema.createTable(this.tableName, (table) => {
       table.increments('id').primary()
       table.uuid('user_id').notNullable().references('id').inTable('users').onDelete('CASCADE')
-      table.integer('book_id').unsigned().notNullable().references('id').inTable('books').onDelete('CASCADE')
+      table
+        .integer('book_id')
+        .unsigned()
+        .notNullable()
+        .references('id')
+        .inTable('books')
+        .onDelete('CASCADE')
       table.integer('chapter').notNullable()
       table.text('recap').notNullable()
       table.timestamp('created_at').notNullable()

@@ -198,8 +198,13 @@ export default class LibraryController {
       dataToUpdate.finishDate = DateTime.now()
     }
 
-    if (rating !== undefined && rating === 0) {
-      dataToUpdate.rating = null
+    if (rating !== undefined) {
+      if (rating === 0) {
+        dataToUpdate.rating = null
+        dataToUpdate.ratedAt = null
+      } else if (rating !== bookTracking.rating) {
+        dataToUpdate.ratedAt = DateTime.now()
+      }
     }
 
     if (

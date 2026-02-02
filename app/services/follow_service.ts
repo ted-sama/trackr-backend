@@ -143,23 +143,15 @@ export default class FollowService {
   /**
    * Get followers of a user with pagination and optional search
    */
-  static async getFollowers(
-    userId: string,
-    page: number = 1,
-    limit: number = 20,
-    search?: string
-  ) {
-    const query = User.query()
-      .whereIn('id', (subquery) => {
-        subquery.from('user_follows').select('follower_id').where('following_id', userId)
-      })
+  static async getFollowers(userId: string, page: number = 1, limit: number = 20, search?: string) {
+    const query = User.query().whereIn('id', (subquery) => {
+      subquery.from('user_follows').select('follower_id').where('following_id', userId)
+    })
 
     if (search && search.trim()) {
       const searchTerm = `%${search.trim().toLowerCase()}%`
       query.where((builder) => {
-        builder
-          .whereILike('username', searchTerm)
-          .orWhereILike('display_name', searchTerm)
+        builder.whereILike('username', searchTerm).orWhereILike('display_name', searchTerm)
       })
     }
 
@@ -169,23 +161,15 @@ export default class FollowService {
   /**
    * Get users that a user is following with pagination and optional search
    */
-  static async getFollowing(
-    userId: string,
-    page: number = 1,
-    limit: number = 20,
-    search?: string
-  ) {
-    const query = User.query()
-      .whereIn('id', (subquery) => {
-        subquery.from('user_follows').select('following_id').where('follower_id', userId)
-      })
+  static async getFollowing(userId: string, page: number = 1, limit: number = 20, search?: string) {
+    const query = User.query().whereIn('id', (subquery) => {
+      subquery.from('user_follows').select('following_id').where('follower_id', userId)
+    })
 
     if (search && search.trim()) {
       const searchTerm = `%${search.trim().toLowerCase()}%`
       query.where((builder) => {
-        builder
-          .whereILike('username', searchTerm)
-          .orWhereILike('display_name', searchTerm)
+        builder.whereILike('username', searchTerm).orWhereILike('display_name', searchTerm)
       })
     }
 

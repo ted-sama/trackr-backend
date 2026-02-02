@@ -105,7 +105,7 @@ export default class FollowsController {
     )
 
     if (!canView) {
-      throw new AppError('You do not have permission to view this user\'s connections', {
+      throw new AppError("You do not have permission to view this user's connections", {
         status: 403,
         code: 'CONNECTIONS_PRIVATE',
       })
@@ -169,7 +169,7 @@ export default class FollowsController {
     )
 
     if (!canView) {
-      throw new AppError('You do not have permission to view this user\'s connections', {
+      throw new AppError("You do not have permission to view this user's connections", {
         status: 403,
         code: 'CONNECTIONS_PRIVATE',
       })
