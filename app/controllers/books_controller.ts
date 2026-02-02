@@ -5,6 +5,7 @@ import db from '@adonisjs/lucid/services/db'
 import { aiTranslate } from '#helpers/ai_translate'
 import { DateTime } from 'luxon'
 import FeedService from '#services/feed_service'
+import CoverSyncService from '#services/cover_sync_service'
 
 export default class BooksController {
   /**
@@ -93,6 +94,9 @@ export default class BooksController {
         code: 'BOOK_NOT_FOUND',
       })
     }
+
+    // Trigger lazy cover sync if not on R2 (fire-and-forget)
+    CoverSyncService.triggerLazySync(book.id, book.coverImage)
 
     // Translate the book's description to fr if not present in db
     if (!book.descriptionFr && book.description) {
