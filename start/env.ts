@@ -96,4 +96,11 @@ export default await Env.create(new URL('../', import.meta.url), {
   |----------------------------------------------------------
   */
   SENTRY_DSN: Env.schema.string.optional(),
+
+  /*
+  |----------------------------------------------------------
+  | Variables for configuring database maintenance scheduler
+  |----------------------------------------------------------
+  */
+  SCHEDULER_ENABLED: Env.schema.string.optional(),
 })
