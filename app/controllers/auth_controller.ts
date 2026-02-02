@@ -410,9 +410,133 @@ export default class AuthController {
       REFRESH_TOKEN_EXPIRY_DAYS
     )
 
-    // Redirect to mobile app with deep link containing both tokens
-    const deepLinkUrl = `trackr://auth/callback?token=${encodeURIComponent(accessToken.value!.release())}&refreshToken=${encodeURIComponent(refreshToken)}`
-    return response.redirect(deepLinkUrl)
+    const token = accessToken.value!.release()
+
+    // Use an intermediate HTML page for reliable token delivery
+    // This handles Android Custom Tabs issues and URL length limitations
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Redirecting to Trackr...</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      text-align: center;
+      max-width: 400px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #667eea;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 20px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    h1 { color: #333; margin-bottom: 10px; font-size: 24px; }
+    p { color: #666; margin-bottom: 20px; }
+    .btn {
+      display: inline-block;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 15px 40px;
+      border-radius: 30px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 16px;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+    }
+    .status { color: #999; font-size: 12px; margin-top: 20px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="spinner" id="spinner"></div>
+    <h1>Authentication Successful!</h1>
+    <p id="message">Redirecting to Trackr...</p>
+    <a href="#" class="btn hidden" id="openBtn">Open Trackr</a>
+    <p class="status" id="status"></p>
+  </div>
+
+  <script>
+    (function() {
+      var token = ${JSON.stringify(token)};
+      var refreshToken = ${JSON.stringify(refreshToken)};
+      var deepLink = 'trackr://auth/callback?token=' + encodeURIComponent(token) + '&refreshToken=' + encodeURIComponent(refreshToken);
+      
+      var redirectAttempted = false;
+      var openBtn = document.getElementById('openBtn');
+      var spinner = document.getElementById('spinner');
+      var message = document.getElementById('message');
+      var status = document.getElementById('status');
+      
+      function showManualButton() {
+        spinner.classList.add('hidden');
+        openBtn.classList.remove('hidden');
+        openBtn.href = deepLink;
+        message.textContent = 'Tap the button below to continue:';
+      }
+      
+      function attemptRedirect() {
+        if (redirectAttempted) return;
+        redirectAttempted = true;
+        
+        status.textContent = 'Attempting redirect...';
+        
+        // Method 1: Direct location change
+        try {
+          window.location.href = deepLink;
+        } catch (e) {
+          console.error('Location redirect failed:', e);
+        }
+        
+        // Fallback: Show manual button after delay
+        setTimeout(function() {
+          // Check if we're still on this page
+          status.textContent = 'If the app did not open, tap the button:';
+          showManualButton();
+        }, 2000);
+      }
+      
+      // Start redirect immediately
+      attemptRedirect();
+      
+      // Also add click handler for manual button
+      openBtn.addEventListener('click', function(e) {
+        // Let the href work naturally
+      });
+    })();
+  </script>
+</body>
+</html>
+    `.trim()
+
+    return response.header('Content-Type', 'text/html').send(html)
   }
 
   /**
