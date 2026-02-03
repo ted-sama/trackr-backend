@@ -6,12 +6,21 @@ import {
   removeFromTopBooksValidator,
   updateLibraryValidator,
 } from '#validators/library'
+import { malImportValidator } from '#validators/mal_import'
 import BookTracking from '#models/book_tracking'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
 import { ActivityLogger } from '#services/activity_logger'
 import ActivityLog from '#models/activity_log'
 import User from '#models/user'
+import { MalImportService } from '#services/mal_import_service'
+import { readFile, unlink } from 'node:fs/promises'
+import { createGunzip } from 'node:zlib'
+import { pipeline } from 'node:stream/promises'
+import { createReadStream, createWriteStream } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { randomUUID } from 'node:crypto'
 
 export default class LibraryController {
   /**
@@ -394,5 +403,86 @@ export default class LibraryController {
     await bookTracking.load('book', (q) => q.preload('authors').preload('publishers'))
 
     return response.ok(bookTracking)
+  }
+
+  /**
+   * @summary Import library from MyAnimeList
+   * @tag Library
+   * @description Imports manga entries from a MyAnimeList XML export file into user's library
+   * @requestBody {"file": "XML file from MAL export (can be .xml or .xml.gz)"}
+   * @responseBody 200 - Import results with counts and details
+   * @responseBody 400 - Invalid file or import error
+   * @responseBody 401 - Unauthorized
+   */
+  async importFromMal({ auth, request, response }: HttpContext) {
+    const user = await auth.authenticate()
+    const payload = await request.validateUsing(malImportValidator)
+    const file = payload.file
+
+    if (!file.tmpPath) {
+      throw new AppError('No file uploaded', {
+        status: 400,
+        code: 'NO_FILE_UPLOADED',
+      })
+    }
+
+    let xmlContent: string
+
+    try {
+      // Check if file is gzipped
+      if (file.extname === 'gz' || file.clientName?.endsWith('.gz')) {
+        // Decompress gzipped file
+        const tmpXmlPath = join(tmpdir(), `mal-import-${randomUUID()}.xml`)
+        await pipeline(
+          createReadStream(file.tmpPath),
+          createGunzip(),
+          createWriteStream(tmpXmlPath)
+        )
+        xmlContent = await readFile(tmpXmlPath, 'utf-8')
+        await unlink(tmpXmlPath).catch(() => {})
+      } else {
+        // Read XML directly
+        xmlContent = await readFile(file.tmpPath, 'utf-8')
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      throw new AppError(`Failed to read file: ${errorMessage}`, {
+        status: 400,
+        code: 'FILE_READ_ERROR',
+      })
+    }
+
+    // Import using MAL service
+    const importService = new MalImportService(user.id)
+    const result = await importService.importFromXml(xmlContent)
+
+    // Log activity
+    await ActivityLogger.log({
+      userId: user.id,
+      action: 'library.importedFromMal',
+      metadata: {
+        imported: result.imported,
+        notFound: result.notFound,
+        skipped: result.skipped,
+        alreadyExists: result.alreadyExists,
+      },
+      resourceType: 'user',
+      resourceId: user.id,
+    })
+
+    // Return appropriate status
+    if (result.errors.length > 0 && result.imported === 0) {
+      return response.badRequest({
+        success: false,
+        message: 'Import failed',
+        ...result,
+      })
+    }
+
+    return response.ok({
+      success: true,
+      message: `Successfully imported ${result.imported} manga(s) from MyAnimeList`,
+      ...result,
+    })
   }
 }
