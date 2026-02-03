@@ -76,6 +76,7 @@ router
     router.delete('/books/:bookId', [LibraryController, 'remove'])
     router.patch('/books/:bookId', [LibraryController, 'update'])
     router.post('/books/:bookId/pin', [LibraryController, 'togglePin'])
+    router.post('/books/import/mal', [LibraryController, 'importFromMal'])
     router.get('/top', [UsersController, 'showTopBooks'])
     router.post('/top/:bookId', [LibraryController, 'addToTopBooks'])
     router.delete('/top/:bookId', [LibraryController, 'removeFromTopBooks'])
