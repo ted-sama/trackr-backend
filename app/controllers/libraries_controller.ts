@@ -6,7 +6,7 @@ import {
   removeFromTopBooksValidator,
   updateLibraryValidator,
 } from '#validators/library'
-import { malImportValidator } from '#validators/mal_import'
+import { malImportValidator, malUsernameImportValidator } from '#validators/mal_import'
 import BookTracking from '#models/book_tracking'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
@@ -482,6 +482,55 @@ export default class LibraryController {
     return response.ok({
       success: true,
       message: `Successfully imported ${result.imported} manga(s) from MyAnimeList`,
+      ...result,
+    })
+  }
+
+  /**
+   * @summary Import library from MyAnimeList using username
+   * @tag Library
+   * @description Imports manga entries from a public MyAnimeList profile using the username
+   * @requestBody {"username": "MAL username"}
+   * @responseBody 200 - Import results with counts and details
+   * @responseBody 400 - Invalid username or import error
+   * @responseBody 401 - Unauthorized
+   */
+  async importFromMalUsername({ auth, request, response }: HttpContext) {
+    const user = await auth.authenticate()
+    const payload = await request.validateUsing(malUsernameImportValidator)
+    const { username } = payload
+
+    // Import using MAL service
+    const importService = new MalImportService(user.id)
+    const result = await importService.importFromUsername(username)
+
+    // Log activity
+    await ActivityLogger.log({
+      userId: user.id,
+      action: 'library.importedFromMalUsername',
+      metadata: {
+        malUsername: username,
+        imported: result.imported,
+        notFound: result.notFound,
+        skipped: result.skipped,
+        alreadyExists: result.alreadyExists,
+      },
+      resourceType: 'user',
+      resourceId: user.id,
+    })
+
+    // Return appropriate status
+    if (result.errors.length > 0 && result.imported === 0) {
+      return response.badRequest({
+        success: false,
+        message: 'Import failed',
+        ...result,
+      })
+    }
+
+    return response.ok({
+      success: true,
+      message: `Successfully imported ${result.imported} manga(s) from MyAnimeList user "${username}"`,
       ...result,
     })
   }

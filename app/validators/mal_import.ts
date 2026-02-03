@@ -11,3 +11,12 @@ export const malImportValidator = vine.compile(
     }),
   })
 )
+
+/**
+ * Validator for MAL username import
+ */
+export const malUsernameImportValidator = vine.compile(
+  vine.object({
+    username: vine.string().trim().minLength(2).maxLength(16),
+  })
+)
