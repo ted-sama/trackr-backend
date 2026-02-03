@@ -103,4 +103,11 @@ export default await Env.create(new URL('../', import.meta.url), {
   |----------------------------------------------------------
   */
   SCHEDULER_ENABLED: Env.schema.string.optional(),
+
+  /*
+  |----------------------------------------------------------
+  | MyAnimeList API credentials
+  |----------------------------------------------------------
+  */
+  MAL_CLIENT_ID: Env.schema.string.optional(),
 })
