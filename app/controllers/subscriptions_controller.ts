@@ -4,6 +4,7 @@ import List from '#models/list'
 import ChatBookUsage from '#models/chat_book_usage'
 import env from '#start/env'
 import { DateTime } from 'luxon'
+import logger from '@adonisjs/core/services/logger'
 
 // RevenueCat product IDs - Configure these in your .env or directly here
 const PRODUCT_IDS = {
@@ -136,26 +137,30 @@ export default class SubscriptionsController {
    * @responseBody 401 - Unauthorized (invalid webhook secret)
    * @responseBody 404 - User not found
    */
-  async webhook({ request, response }: HttpContext) {
-    // Verify webhook authorization
+  async webhook({ request, response, logger }: HttpContext) {
+    // Verify webhook authorization - REQUIRED in production
     const authHeader = request.header('authorization')
     const webhookSecret = env.get('REVENUECAT_WEBHOOK_SECRET')
 
-    if (webhookSecret && authHeader !== `Bearer ${webhookSecret}`) {
+    if (!webhookSecret) {
+      logger.error('[RevenueCat Webhook] REVENUECAT_WEBHOOK_SECRET is not configured')
+      return response.internalServerError({ message: 'Webhook not configured' })
+    }
+
+    if (authHeader !== `Bearer ${webhookSecret}`) {
       return response.unauthorized({ message: 'Invalid webhook authorization' })
     }
 
     const payload = request.body() as RevenueCatWebhookEvent
     const { event } = payload
 
-    console.log(`[RevenueCat Webhook] Received event: ${event.type} for user: ${event.app_user_id}`)
-    console.log('[RevenueCat Webhook] Full payload:', JSON.stringify(payload, null, 2))
+    logger.info(`[RevenueCat Webhook] Received event: ${event.type} for user: ${event.app_user_id}`)
 
     // Find user by app_user_id (which should be our user.id UUID)
     const user = await User.find(event.app_user_id)
 
     if (!user) {
-      console.warn(`[RevenueCat Webhook] User not found: ${event.app_user_id}`)
+      logger.warn(`[RevenueCat Webhook] User not found: ${event.app_user_id}`)
       // Return 200 anyway to acknowledge receipt - RevenueCat will retry on non-2xx
       return response.ok({ message: 'User not found, event acknowledged' })
     }
@@ -164,7 +169,7 @@ export default class SubscriptionsController {
       await this.processWebhookEvent(user, event)
       return response.ok({ message: 'Webhook processed successfully' })
     } catch (error) {
-      console.error('[RevenueCat Webhook] Error processing event:', error)
+      logger.error('[RevenueCat Webhook] Error processing event:', error)
       // Still return 200 to prevent retries on application errors
       return response.ok({ message: 'Webhook acknowledged with error' })
     }
@@ -179,7 +184,7 @@ export default class SubscriptionsController {
   ): Promise<void> {
     switch (event.type) {
       case 'TEST':
-        console.log('[RevenueCat Webhook] Test event received')
+        logger.info('[RevenueCat Webhook] Test event received')
         break
 
       case 'INITIAL_PURCHASE':
@@ -205,7 +210,7 @@ export default class SubscriptionsController {
         break
 
       default:
-        console.log(`[RevenueCat Webhook] Unhandled event type: ${event.type}`)
+        logger.info(`[RevenueCat Webhook] Unhandled event type: ${event.type}`)
     }
   }
 
@@ -219,16 +224,11 @@ export default class SubscriptionsController {
     const entitlement = event.entitlements?.[0]
     const transaction = event.transaction
 
-    // Debug logging for troubleshooting
-    console.log('[RevenueCat Webhook] Event data:', {
+    // Debug logging for troubleshooting (redacted for security)
+    logger.debug('[RevenueCat Webhook] Processing event', {
       type: event.type,
-      entitlements: event.entitlements,
-      transaction: transaction
-        ? {
-            product_id: transaction.product_id,
-            original_transaction_id: transaction.original_transaction_id,
-          }
-        : null,
+      hasEntitlements: !!event.entitlements?.length,
+      hasTransaction: !!transaction,
     })
 
     // Determine subscription period from product ID
@@ -255,16 +255,14 @@ export default class SubscriptionsController {
 
     if (entitlement?.expires_at) {
       user.subscriptionExpiresAt = DateTime.fromISO(entitlement.expires_at)
-      console.log(`[RevenueCat Webhook] Set expires_at to: ${entitlement.expires_at}`)
+      logger.debug('[RevenueCat Webhook] Subscription expiration set')
     } else {
-      console.log('[RevenueCat Webhook] No expires_at found in entitlements')
+      logger.debug('[RevenueCat Webhook] No expires_at found in entitlements')
     }
 
     await user.save()
 
-    console.log(
-      `[RevenueCat Webhook] Subscription activated for user ${user.id}, period: ${period}`
-    )
+    logger.info(`[RevenueCat Webhook] Subscription activated for user, period: ${period}`)
   }
 
   /**
@@ -285,9 +283,7 @@ export default class SubscriptionsController {
 
     await user.save()
 
-    console.log(
-      `[RevenueCat Webhook] Subscription cancelled for user ${user.id}, expires at: ${user.subscriptionExpiresAt}`
-    )
+    logger.info('[RevenueCat Webhook] Subscription cancelled')
   }
 
   /**
@@ -307,9 +303,7 @@ export default class SubscriptionsController {
     // Clean up premium-only features
     await this.cleanupPremiumFeatures(user)
 
-    console.log(
-      `[RevenueCat Webhook] Subscription expired for user ${user.id}, premium features cleaned up`
-    )
+    logger.info('[RevenueCat Webhook] Subscription expired, premium features cleaned up')
   }
 
   /**
@@ -325,7 +319,7 @@ export default class SubscriptionsController {
     if (user.avatar && this.isGifUrl(user.avatar)) {
       user.avatar = null
       profileChanged = true
-      console.log(`[Subscription Cleanup] Removed GIF avatar for user ${user.id}`)
+      logger.debug('[Subscription Cleanup] Removed GIF avatar')
     }
 
     // Reset profile backdrop to color if it was using an image
@@ -333,7 +327,7 @@ export default class SubscriptionsController {
       user.backdropMode = 'color'
       user.backdropImage = null
       profileChanged = true
-      console.log(`[Subscription Cleanup] Reset profile backdrop to color for user ${user.id}`)
+      logger.debug('[Subscription Cleanup] Reset profile backdrop to color')
     }
 
     if (profileChanged) {
@@ -353,9 +347,7 @@ export default class SubscriptionsController {
         list.backdropImage = null
         await list.save()
       }
-      console.log(
-        `[Subscription Cleanup] Reset ${listsWithImageBackdrop.length} lists backdrops to color for user ${user.id}`
-      )
+      logger.debug(`[Subscription Cleanup] Reset ${listsWithImageBackdrop.length} lists backdrops to color`)
     }
   }
 
@@ -385,7 +377,7 @@ export default class SubscriptionsController {
 
     await user.save()
 
-    console.log(`[RevenueCat Webhook] Billing issue for user ${user.id}`)
+    logger.warn('[RevenueCat Webhook] Billing issue detected')
   }
 
   /**
@@ -416,9 +408,7 @@ export default class SubscriptionsController {
 
     await user.save()
 
-    console.log(
-      `[RevenueCat Webhook] Product changed for user ${user.id}, new period: ${user.subscriptionPeriod}`
-    )
+    logger.info(`[RevenueCat Webhook] Product changed, new period: ${user.subscriptionPeriod}`)
   }
 
   /**
