@@ -6,6 +6,7 @@ import { DateTime } from 'luxon'
 import Book from '#models/book'
 import BookRecap from '#models/book_recap'
 import BookTracking from '#models/book_tracking'
+import logger from '@adonisjs/core/services/logger'
 
 const openrouter = createOpenRouter({
   apiKey: env.get('OPENROUTER_API_KEY'),
@@ -164,11 +165,15 @@ RÈGLES:
         availableAt: null,
       } satisfies RecapResponse)
     } catch (error) {
-      console.error('Recap generation error:', error)
-      return response.internalServerError({
+      logger.error('Recap generation error:', error)
+      // Hide error details in production
+      const errorResponse: { message: string; error?: string } = {
         message: 'Failed to generate recap',
-        error: error.message,
-      })
+      }
+      if (process.env.NODE_ENV !== 'production') {
+        errorResponse.error = error.message
+      }
+      return response.internalServerError(errorResponse)
     }
   }
 }

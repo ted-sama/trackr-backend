@@ -1,8 +1,14 @@
 import { GoogleGenAI } from '@google/genai'
+import env from '#start/env'
 
 export async function aiTranslate(text: string, to: string): Promise<string> {
+  const apiKey = env.get('GOOGLE_API_KEY')
+  if (!apiKey) {
+    throw new Error('GOOGLE_API_KEY is not configured')
+  }
+
   const genai = new GoogleGenAI({
-    apiKey: process.env.GOOGLE_API_KEY,
+    apiKey,
   })
 
   const translation = await genai.models.generateContent({

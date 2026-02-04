@@ -172,7 +172,7 @@ export default class ChatsController {
       authorNames
     )
 
-    console.log(enrichedMessages[0].content)
+    // Note: Chat content logging removed for privacy/security
 
     // Construire le prompt système avec les informations du livre et du suivi
     const systemPrompt = `Tu es un assistant spécialisé dans les mangas, comics et manhwa. Ta mission est de répondre avec précision, clarté et nuance, et de discuter de manière fiable de l'œuvre de l'utilisateur (intrigue, personnages, thèmes, arcs, publication, continuités, adaptations, recommandations, ordres de lecture). Tu privilégies les informations vérifiables et sourcées. Adapte toujours ta réponse au niveau de spoilers souhaité par l'utilisateur.
