@@ -1,6 +1,6 @@
 import type { HttpContext } from '@adonisjs/core/http'
 import type { NextFn } from '@adonisjs/core/types/http'
-import cache from '@adonisjs/cache/services/main'
+import cacheService from '#services/cache_service'
 import AppError from '#exceptions/app_error'
 
 interface RateLimitConfig {
@@ -35,7 +35,7 @@ export default class RateLimiterMiddleware {
     const key = `${config.keyPrefix}:${ip}`
 
     try {
-      const currentCount = await cache.get<number>(key) ?? 0
+      const currentCount = (await cacheService.get<number>(key)) ?? 0
 
       if (currentCount >= config.maxAttempts) {
         const windowMinutes = Math.ceil(config.windowMs / 60000)
@@ -48,10 +48,10 @@ export default class RateLimiterMiddleware {
       // Increment counter
       const ttlSeconds = Math.ceil(config.windowMs / 1000)
       if (currentCount === 0) {
-        await cache.set(key, 1, { ttl: `${ttlSeconds}s` })
+        await cacheService.set(key, 1, ttlSeconds)
       } else {
         // Use put to update without resetting TTL would be ideal, but set works
-        await cache.set(key, currentCount + 1, { ttl: `${ttlSeconds}s` })
+        await cacheService.set(key, currentCount + 1, ttlSeconds)
       }
 
       // Set rate limit headers
