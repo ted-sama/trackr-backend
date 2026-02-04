@@ -358,6 +358,8 @@ Configuration in `config/swagger.ts`.
 
 ## Best Practices
 
+Always verify after big changes that the server builds correctly.
+
 ### Controllers
 
 - Single responsibility per action

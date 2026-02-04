@@ -13,7 +13,7 @@ import db from '@adonisjs/lucid/services/db'
 import { ActivityLogger } from '#services/activity_logger'
 import ActivityLog from '#models/activity_log'
 import User from '#models/user'
-import { MalImportService } from '#services/mal_import_service'
+import { MalImportService, type PendingImportBook } from '#services/mal_import_service'
 import { readFile, unlink } from 'node:fs/promises'
 import { createGunzip } from 'node:zlib'
 import { pipeline } from 'node:stream/promises'
@@ -452,74 +452,103 @@ export default class LibraryController {
       })
     }
 
-    // Import using MAL service
+    // Fetch from MAL XML (no tracking created yet)
     const importService = new MalImportService(user.id)
-    const result = await importService.importFromXml(xmlContent)
-
-    // Log activity
-    await ActivityLogger.log({
-      userId: user.id,
-      action: 'library.importedFromMal',
-      metadata: {
-        imported: result.imported,
-        notFound: result.notFound,
-        skipped: result.skipped,
-        alreadyExists: result.alreadyExists,
-      },
-      resourceType: 'user',
-      resourceId: user.id,
-    })
+    const result = await importService.fetchFromXml(xmlContent)
 
     // Return appropriate status
-    if (result.errors.length > 0 && result.imported === 0) {
+    if (result.errors.length > 0 && result.pendingBooks.length === 0) {
       return response.badRequest({
         success: false,
-        message: 'Import failed',
+        message: 'Fetch failed',
         ...result,
       })
     }
 
     return response.ok({
       success: true,
-      message: `Successfully imported ${result.imported} manga(s) from MyAnimeList`,
+      message: `Found ${result.pendingBooks.length} manga(s) to import from MyAnimeList XML`,
       ...result,
     })
   }
 
   /**
-   * @summary Import library from MyAnimeList using username
+   * @summary Fetch library from MyAnimeList using username (step 1)
    * @tag Library
-   * @description Imports manga entries from a public MyAnimeList profile using the username
+   * @description Fetches manga entries from a public MyAnimeList profile without importing them.
+   *              Returns pending books for user review before confirmation.
    * @requestBody {"username": "MAL username"}
-   * @responseBody 200 - Import results with counts and details
-   * @responseBody 400 - Invalid username or import error
+   * @responseBody 200 - Pending books and stats
+   * @responseBody 400 - Invalid username or fetch error
    * @responseBody 401 - Unauthorized
    */
-  async importFromMalUsername({ auth, request, response }: HttpContext) {
+  async fetchFromMalUsername({ auth, request, response }: HttpContext) {
     const user = await auth.authenticate()
     const payload = await request.validateUsing(malUsernameImportValidator)
     const { username } = payload
 
-    // Import using MAL service
+    // Fetch from MAL (no tracking created yet)
     const importService = new MalImportService(user.id)
-    const result = await importService.importFromUsername(username)
+    const result = await importService.fetchFromUsername(username)
+
+    // Return appropriate status
+    if (result.errors.length > 0 && result.pendingBooks.length === 0) {
+      const errorMessage = result.errors.join(' ').toLowerCase()
+      const errorCode = errorMessage.includes('not found on myanimelist')
+        ? 'MAL_USER_NOT_FOUND'
+        : 'MAL_IMPORT_FAILED'
+
+      return response.badRequest({
+        success: false,
+        message: 'Fetch failed',
+        code: errorCode,
+        ...result,
+      })
+    }
+
+    return response.ok({
+      success: true,
+      message: `Found ${result.pendingBooks.length} manga(s) to import from MyAnimeList user "${username}"`,
+      ...result,
+    })
+  }
+
+  /**
+   * @summary Confirm MAL import (step 2)
+   * @tag Library
+   * @description Confirms the import of selected books from the pending list.
+   * @requestBody {"books": [PendingImportBook]}
+   * @responseBody 200 - Import confirmation with count
+   * @responseBody 400 - Import error
+   * @responseBody 401 - Unauthorized
+   */
+  async confirmMalImport({ auth, request, response }: HttpContext) {
+    const user = await auth.authenticate()
+    const { books } = request.body() as { books: PendingImportBook[] }
+
+    if (!books || !Array.isArray(books) || books.length === 0) {
+      return response.badRequest({
+        success: false,
+        message: 'No books provided for import',
+      })
+    }
+
+    // Confirm import
+    const importService = new MalImportService(user.id)
+    const result = await importService.confirmImport(books)
 
     // Log activity
     await ActivityLogger.log({
       userId: user.id,
-      action: 'library.importedFromMalUsername',
+      action: 'library.confirmedMalImport',
       metadata: {
-        malUsername: username,
         imported: result.imported,
-        notFound: result.notFound,
-        skipped: result.skipped,
-        alreadyExists: result.alreadyExists,
+        requested: books.length,
       },
       resourceType: 'user',
       resourceId: user.id,
     })
 
-    // Return appropriate status
     if (result.errors.length > 0 && result.imported === 0) {
       return response.badRequest({
         success: false,
@@ -530,7 +559,7 @@ export default class LibraryController {
 
     return response.ok({
       success: true,
-      message: `Successfully imported ${result.imported} manga(s) from MyAnimeList user "${username}"`,
+      message: `Successfully imported ${result.imported} manga(s)`,
       ...result,
     })
   }

@@ -1,9 +1,13 @@
 /**
  * MyAnimeList Library Import Service
- * 
+ *
  * Imports user's manga library from MAL via:
  * 1. XML export file upload
  * 2. MAL API v2 with username (public lists only)
+ *
+ * Two-step process:
+ * 1. Fetch: Get books from MAL and match with Trackr database (no tracking created)
+ * 2. Confirm: Create trackings for selected books
  */
 
 import { DateTime } from 'luxon'
@@ -79,18 +83,39 @@ interface MalApiResponse {
   }
 }
 
-export interface ImportResult {
-  imported: number
+// Book pending import (not yet added to library)
+export interface PendingImportBook {
+  bookId: number
+  malId: number
+  title: string
+  coverImage: string | null
+  status: BookTracking['status']
+  currentChapter: number | null
+  currentVolume: number | null
+  rating: number | null
+  startDate: string | null
+  finishDate: string | null
+  notes: string | null
+}
+
+// Result of fetching from MAL (no tracking created yet)
+export interface FetchResult {
+  pendingBooks: PendingImportBook[]
   notFound: number
   skipped: number
   alreadyExists: number
   errors: string[]
   details: {
-    imported: string[]
     notFound: string[]
     skipped: string[]
     alreadyExists: string[]
   }
+}
+
+// Result of confirming import
+export interface ConfirmResult {
+  imported: number
+  errors: string[]
 }
 
 export class MalImportService {
@@ -101,17 +126,17 @@ export class MalImportService {
   }
 
   /**
-   * Import manga library from MAL using username (API v2)
+   * Fetch manga library from MAL using username (API v2)
+   * Does NOT create trackings - returns pending books for user review
    */
-  async importFromUsername(username: string): Promise<ImportResult> {
-    const result: ImportResult = {
-      imported: 0,
+  async fetchFromUsername(username: string): Promise<FetchResult> {
+    const result: FetchResult = {
+      pendingBooks: [],
       notFound: 0,
       skipped: 0,
       alreadyExists: 0,
       errors: [],
       details: {
-        imported: [],
         notFound: [],
         skipped: [],
         alreadyExists: [],
@@ -126,15 +151,15 @@ export class MalImportService {
     try {
       // Fetch all manga entries from MAL API (with pagination)
       const entries = await this.fetchAllMangaFromApi(username, result)
-      
+
       if (entries.length === 0 && result.errors.length === 0) {
         result.errors.push('No manga entries found in this user\'s list, or the list is private.')
         return result
       }
 
-      // Process each entry
+      // Process each entry (match with Trackr database, don't create tracking)
       for (const entry of entries) {
-        await this.processApiEntry(entry, result)
+        await this.matchApiEntry(entry, result)
       }
 
     } catch (error) {
@@ -146,9 +171,61 @@ export class MalImportService {
   }
 
   /**
+   * Confirm import of selected books
+   * Creates trackings for the provided book IDs
+   */
+  async confirmImport(books: PendingImportBook[]): Promise<ConfirmResult> {
+    const result: ConfirmResult = {
+      imported: 0,
+      errors: [],
+    }
+
+    for (const book of books) {
+      try {
+        // Check if already in library (safety check)
+        const existingTracking = await BookTracking.query()
+          .where('user_id', this.userId)
+          .where('book_id', book.bookId)
+          .first()
+
+        if (existingTracking) {
+          continue // Skip, already exists
+        }
+
+        // Parse dates
+        const startDate = book.startDate ? this.parseDate(book.startDate) : null
+        const finishDate = book.finishDate ? this.parseDate(book.finishDate) : null
+
+        // Create tracking entry
+        await BookTracking.create({
+          userId: this.userId,
+          bookId: book.bookId,
+          status: book.status,
+          currentChapter: book.currentChapter,
+          currentVolume: book.currentVolume,
+          rating: book.rating,
+          ratedAt: book.rating ? DateTime.now() : null,
+          startDate: startDate,
+          finishDate: finishDate,
+          notes: book.notes,
+          lastReadAt: book.currentChapter || book.currentVolume ? DateTime.now() : null,
+          isPinnedInLibrary: false,
+        })
+
+        result.imported++
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        result.errors.push(`Failed to import "${book.title}": ${errorMessage}`)
+      }
+    }
+
+    return result
+  }
+
+  /**
    * Fetch all manga from MAL API with pagination
    */
-  private async fetchAllMangaFromApi(username: string, result: ImportResult): Promise<MalApiMangaEntry[]> {
+  private async fetchAllMangaFromApi(username: string, result: FetchResult): Promise<MalApiMangaEntry[]> {
     const allEntries: MalApiMangaEntry[] = []
     let nextUrl: string | null = `${MAL_API_BASE}/users/${encodeURIComponent(username)}/mangalist?fields=list_status&limit=100`
 
@@ -162,12 +239,12 @@ export class MalImportService {
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({}))
-          
+
           if (response.status === 404) {
             result.errors.push(`User "${username}" not found on MyAnimeList.`)
             return []
           }
-          
+
           if (response.status === 403 || errorData.error === 'not_permitted') {
             result.errors.push(`Access to "${username}"'s manga list is restricted. The list must be public.`)
             return []
@@ -199,9 +276,10 @@ export class MalImportService {
   }
 
   /**
-   * Process a single API manga entry
+   * Match a single API manga entry with Trackr database
+   * Does NOT create tracking - adds to pendingBooks if found
    */
-  private async processApiEntry(entry: MalApiMangaEntry, result: ImportResult): Promise<void> {
+  private async matchApiEntry(entry: MalApiMangaEntry, result: FetchResult): Promise<void> {
     const malId = entry.node.id
     const title = entry.node.title
     const listStatus = entry.list_status
@@ -239,49 +317,44 @@ export class MalImportService {
         return
       }
 
-      // Parse dates
-      const startDate = this.parseDate(listStatus.start_date)
-      const finishDate = this.parseDate(listStatus.finish_date)
+      // Convert MAL rating (1-10) to Trackr rating (0.5-5)
+      const rating = listStatus.score > 0 ? listStatus.score / 2 : null
 
-      // Create tracking entry
-      await BookTracking.create({
-        userId: this.userId,
+      // Add to pending books (not yet imported)
+      result.pendingBooks.push({
         bookId: book.id,
+        malId: malId,
+        title: book.title,
+        coverImage: book.coverImage,
         status: trackrStatus,
         currentChapter: listStatus.num_chapters_read > 0 ? listStatus.num_chapters_read : null,
         currentVolume: listStatus.num_volumes_read > 0 ? listStatus.num_volumes_read : null,
-        rating: listStatus.score > 0 ? listStatus.score : null,
-        ratedAt: listStatus.score > 0 ? DateTime.now() : null,
-        startDate: startDate,
-        finishDate: finishDate,
+        rating: rating,
+        startDate: listStatus.start_date || null,
+        finishDate: listStatus.finish_date || null,
         notes: null,
-        lastReadAt: listStatus.num_chapters_read > 0 || listStatus.num_volumes_read > 0 ? DateTime.now() : null,
-        isPinnedInLibrary: false,
       })
-
-      result.imported++
-      result.details.imported.push(title)
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      result.errors.push(`Failed to import "${title}": ${errorMessage}`)
+      result.errors.push(`Failed to process "${title}": ${errorMessage}`)
       result.skipped++
       result.details.skipped.push(`${title} (error: ${errorMessage})`)
     }
   }
 
   /**
-   * Parse MAL XML and import manga entries into user's library
+   * Fetch from MAL XML and match with Trackr database
+   * Does NOT create trackings - returns pending books for user review
    */
-  async importFromXml(xmlContent: string): Promise<ImportResult> {
-    const result: ImportResult = {
-      imported: 0,
+  async fetchFromXml(xmlContent: string): Promise<FetchResult> {
+    const result: FetchResult = {
+      pendingBooks: [],
       notFound: 0,
       skipped: 0,
       alreadyExists: 0,
       errors: [],
       details: {
-        imported: [],
         notFound: [],
         skipped: [],
         alreadyExists: [],
@@ -317,7 +390,7 @@ export class MalImportService {
 
       // Process each manga entry
       for (const entry of mangaEntries) {
-        await this.processXmlEntry(entry, result)
+        await this.matchXmlEntry(entry, result)
       }
 
     } catch (error) {
@@ -329,9 +402,10 @@ export class MalImportService {
   }
 
   /**
-   * Process a single XML manga entry
+   * Match a single XML manga entry with Trackr database
+   * Does NOT create tracking - adds to pendingBooks if found
    */
-  private async processXmlEntry(entry: MalMangaEntry, result: ImportResult): Promise<void> {
+  private async matchXmlEntry(entry: MalMangaEntry, result: FetchResult): Promise<void> {
     const malId = entry.manga_mangadb_id
     const title = entry.manga_title
 
@@ -368,32 +442,27 @@ export class MalImportService {
         return
       }
 
-      // Parse dates
-      const startDate = this.parseDate(entry.my_start_date)
-      const finishDate = this.parseDate(entry.my_finish_date)
+      // Convert MAL rating (1-10) to Trackr rating (0.5-5)
+      const rating = entry.my_score > 0 ? entry.my_score / 2 : null
 
-      // Create tracking entry
-      await BookTracking.create({
-        userId: this.userId,
+      // Add to pending books (not yet imported)
+      result.pendingBooks.push({
         bookId: book.id,
+        malId: malId,
+        title: book.title,
+        coverImage: book.coverImage,
         status: trackrStatus,
         currentChapter: entry.my_read_chapters > 0 ? entry.my_read_chapters : null,
         currentVolume: entry.my_read_volumes > 0 ? entry.my_read_volumes : null,
-        rating: entry.my_score > 0 ? entry.my_score : null,
-        ratedAt: entry.my_score > 0 ? DateTime.now() : null,
-        startDate: startDate,
-        finishDate: finishDate,
+        rating: rating,
+        startDate: entry.my_start_date || null,
+        finishDate: entry.my_finish_date || null,
         notes: entry.my_comments || null,
-        lastReadAt: entry.my_read_chapters > 0 || entry.my_read_volumes > 0 ? DateTime.now() : null,
-        isPinnedInLibrary: false,
       })
-
-      result.imported++
-      result.details.imported.push(title)
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      result.errors.push(`Failed to import "${title}": ${errorMessage}`)
+      result.errors.push(`Failed to process "${title}": ${errorMessage}`)
       result.skipped++
       result.details.skipped.push(`${title} (error: ${errorMessage})`)
     }
