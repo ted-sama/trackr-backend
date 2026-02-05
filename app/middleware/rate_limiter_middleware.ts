@@ -20,6 +20,7 @@ export default class RateLimiterMiddleware {
     register: { maxAttempts: 10, windowMs: 60 * 60 * 1000, keyPrefix: 'rl:register' }, // 10 per hour
     refresh: { maxAttempts: 20, windowMs: 60 * 60 * 1000, keyPrefix: 'rl:refresh' }, // 20 per hour
     'check-email': { maxAttempts: 3, windowMs: 60 * 1000, keyPrefix: 'rl:check-email' }, // 3 per minute
+    'resend-verification': { maxAttempts: 3, windowMs: 60 * 60 * 1000, keyPrefix: 'rl:verify' }, // 3 per hour
   }
 
   async handle(ctx: HttpContext, next: NextFn, options: { limitType: string }) {

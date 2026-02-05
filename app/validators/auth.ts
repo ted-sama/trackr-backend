@@ -53,3 +53,15 @@ export const refreshTokenSchema = vine.compile(
     refreshToken: vine.string().trim(),
   })
 )
+
+export const verifyEmailSchema = vine.compile(
+  vine.object({
+    token: vine.string().trim(),
+  })
+)
+
+export const resendVerificationSchema = vine.compile(
+  vine.object({
+    email: vine.string().email().trim(),
+  })
+)

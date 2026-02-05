@@ -11,9 +11,12 @@ import {
   changePasswordSchema,
   checkEmailSchema,
   refreshTokenSchema,
+  verifyEmailSchema,
+  resendVerificationSchema,
 } from '#validators/auth'
 import PasswordResetToken from '#models/password_reset_token'
 import RefreshToken from '#models/refresh_token'
+import EmailVerificationToken from '#models/email_verification_token'
 import { DateTime } from 'luxon'
 import { randomBytes } from 'node:crypto'
 import { detectLocale, getEmailTemplate } from '#helpers/locale'
@@ -67,16 +70,14 @@ export default class AuthController {
       password,
     })
 
-    const locale = detectLocale(request)
-    await mail.send((message) => {
-      message.from('noreply@email.trackrr.app', 'Trackr')
-      message.to(user.email)
-      message.subject(locale === 'fr' ? 'Bienvenue sur Trackr' : 'Welcome to Trackr')
-      message.htmlView(getEmailTemplate('welcome', locale), {
-        displayName: user.displayName || user.username,
-      })
+    if (!user.emailVerifiedAt) {
+      await this.sendVerificationEmail(user, request)
+    }
+
+    return response.ok({
+      user,
+      needsVerification: !user.emailVerifiedAt,
     })
-    return response.ok(user)
   }
 
   /**
@@ -100,6 +101,13 @@ export default class AuthController {
       throw new AppError('Invalid credentials', {
         status: 400,
         code: 'AUTH_INVALID_CREDENTIALS',
+      })
+    }
+
+    if (!user.emailVerifiedAt) {
+      throw new AppError('Email not verified', {
+        status: 403,
+        code: 'AUTH_EMAIL_NOT_VERIFIED',
       })
     }
 
@@ -290,7 +298,71 @@ export default class AuthController {
 
     const existingUser = await User.query().whereRaw('LOWER(email) = ?', [email]).first()
 
-    return response.ok({ exists: !!existingUser })
+    return response.ok({
+      exists: !!existingUser,
+      verified: !!existingUser?.emailVerifiedAt,
+    })
+  }
+
+  /**
+   * @summary Verify email
+   * @tag Authentication
+   * @description Verifies a user's email address using a token
+   * @requestBody <verifyEmailSchema> - Verification token
+   * @responseBody 200 - {"message": "Email verified"}
+   * @responseBody 400 - {"code": "AUTH_INVALID_TOKEN", "message": "Invalid or expired verification token"}
+   */
+  async verifyEmail({ request, response }: HttpContext) {
+    const { token } = await verifyEmailSchema.validate(request.body())
+
+    const verificationToken = await EmailVerificationToken.query()
+      .where('token', token)
+      .preload('user')
+      .first()
+
+    if (!verificationToken || verificationToken.isExpired) {
+      throw new AppError('Invalid or expired verification token', {
+        status: 400,
+        code: 'AUTH_INVALID_TOKEN',
+      })
+    }
+
+    const user = verificationToken.user
+    if (!user.emailVerifiedAt) {
+      user.emailVerifiedAt = DateTime.now()
+      await user.save()
+    }
+
+    await EmailVerificationToken.query().where('user_id', user.id).delete()
+
+    return response.ok({ message: 'Email verified' })
+  }
+
+  /**
+   * @summary Resend verification email
+   * @tag Authentication
+   * @description Resends the email verification link if the account exists and is not verified
+   * @requestBody <resendVerificationSchema> - User email
+   * @responseBody 200 - {"message": "If an account exists and is not verified, a verification link has been sent"}
+   */
+  async resendVerification({ request, response }: HttpContext) {
+    const { email } = await resendVerificationSchema.validate(request.body())
+    const normalizedEmail = email.toLowerCase()
+
+    const user = await User.query().whereRaw('LOWER(email) = ?', [normalizedEmail]).first()
+
+    if (!user || user.emailVerifiedAt) {
+      return response.ok({
+        message:
+          'If an account exists and is not verified, a verification link has been sent',
+      })
+    }
+
+    await this.sendVerificationEmail(user, request)
+
+    return response.ok({
+      message: 'If an account exists and is not verified, a verification link has been sent',
+    })
   }
 
   /**
@@ -364,6 +436,11 @@ export default class AuthController {
         needsSave = true
       }
 
+      if (!user.emailVerifiedAt) {
+        user.emailVerifiedAt = DateTime.now()
+        needsSave = true
+      }
+
       if (needsSave) {
         await user.save()
       }
@@ -389,6 +466,11 @@ export default class AuthController {
         username,
         avatar: googleUser.avatarUrl,
       })
+
+      if (!user.emailVerifiedAt) {
+        user.emailVerifiedAt = DateTime.now()
+        await user.save()
+      }
 
       const locale = detectLocale(request)
       await mail.send((message) => {
@@ -482,6 +564,32 @@ export default class AuthController {
 
     return response.ok({
       message: 'Logged out successfully',
+    })
+  }
+
+  private async sendVerificationEmail(user: User, request: HttpContext['request']) {
+    await EmailVerificationToken.query().where('user_id', user.id).delete()
+
+    const token = randomBytes(32).toString('hex')
+    await EmailVerificationToken.create({
+      userId: user.id,
+      token,
+      expiresAt: DateTime.now().plus({ hours: 24 }),
+    })
+
+    const verifyUrl = `${process.env.FRONTEND_URL || 'https://trackrr.app'}/verify-email?token=${token}`
+    const locale = detectLocale(request)
+
+    await mail.send((message) => {
+      message.from('noreply@email.trackrr.app', 'Trackr')
+      message.to(user.email)
+      message.subject(
+        locale === 'fr' ? 'Vérifie ton email Trackr' : 'Verify your Trackr email'
+      )
+      message.htmlView(getEmailTemplate('verify_email', locale), {
+        displayName: user.displayName || user.username,
+        verifyUrl,
+      })
     })
   }
 }

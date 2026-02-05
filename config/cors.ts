@@ -8,7 +8,7 @@ import { defineConfig } from '@adonisjs/cors'
  */
 const corsConfig = defineConfig({
   enabled: true,
-  origin: ['https://trackrr.app', 'https://app.trackrr.app', 'trackr://'],
+  origin: ['https://trackrr.app', 'https://app.trackrr.app', 'http://localhost:3000', 'trackr://'],
   methods: ['GET', 'HEAD', 'POST', 'PUT', 'DELETE'],
   headers: true,
   exposeHeaders: [],

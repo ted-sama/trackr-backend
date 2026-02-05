@@ -49,13 +49,27 @@ router.get('/docs', async () => {
 
 router
   .group(() => {
-    router.post('/register', [AuthController, 'register']).use(middleware.rateLimit({ limitType: 'register' }))
-    router.post('/login', [AuthController, 'login']).use(middleware.rateLimit({ limitType: 'login' }))
-    router.post('/check-email', [AuthController, 'checkEmail']).use(middleware.rateLimit({ limitType: 'check-email' }))
-    router.post('/forgot-password', [AuthController, 'forgotPassword']).use(middleware.rateLimit({ limitType: 'forgot-password' }))
+    router
+      .post('/register', [AuthController, 'register'])
+      .use(middleware.rateLimit({ limitType: 'register' }))
+    router
+      .post('/login', [AuthController, 'login'])
+      .use(middleware.rateLimit({ limitType: 'login' }))
+    router
+      .post('/check-email', [AuthController, 'checkEmail'])
+      .use(middleware.rateLimit({ limitType: 'check-email' }))
+    router.post('/verify-email', [AuthController, 'verifyEmail'])
+    router
+      .post('/resend-verification', [AuthController, 'resendVerification'])
+      .use(middleware.rateLimit({ limitType: 'resend-verification' }))
+    router
+      .post('/forgot-password', [AuthController, 'forgotPassword'])
+      .use(middleware.rateLimit({ limitType: 'forgot-password' }))
     router.post('/reset-password', [AuthController, 'resetPassword'])
     router.post('/change-password', [AuthController, 'changePassword'])
-    router.post('/refresh', [AuthController, 'refresh']).use(middleware.rateLimit({ limitType: 'refresh' }))
+    router
+      .post('/refresh', [AuthController, 'refresh'])
+      .use(middleware.rateLimit({ limitType: 'refresh' }))
     router.post('/logout', [AuthController, 'logout']).use(middleware.auth())
     router.get('/google/redirect', [AuthController, 'googleRedirect'])
     router.get('/google/callback', [AuthController, 'googleCallback'])
