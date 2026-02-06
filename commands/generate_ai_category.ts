@@ -4,6 +4,7 @@ import { aiTranslate } from '#helpers/ai_translate'
 import { GoogleGenAI } from '@google/genai'
 import { BaseCommand } from '@adonisjs/core/ace'
 import type { CommandOptions } from '@adonisjs/core/types/ace'
+import env from '#start/env'
 
 export default class GenerateAiCategory extends BaseCommand {
   static commandName = 'generate:ai-category'
@@ -17,7 +18,7 @@ export default class GenerateAiCategory extends BaseCommand {
     this.logger.info('Generating AI category...')
 
     const genai = new GoogleGenAI({
-      apiKey: process.env.GOOGLE_API_KEY,
+      apiKey: env.get('GEMINI_API_KEY'),
     })
 
     const result = await genai.models.generateContent({

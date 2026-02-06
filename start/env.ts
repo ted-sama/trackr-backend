@@ -111,10 +111,4 @@ export default await Env.create(new URL('../', import.meta.url), {
   */
   MAL_CLIENT_ID: Env.schema.string.optional(),
 
-  /*
-  |----------------------------------------------------------
-  | Google API (for AI translation)
-  |----------------------------------------------------------
-  */
-  GOOGLE_API_KEY: Env.schema.string.optional(),
 })
