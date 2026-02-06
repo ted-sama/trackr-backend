@@ -22,20 +22,20 @@ const MAL_CLIENT_ID = env.get('MAL_CLIENT_ID')
 
 // MAL status mapping to Trackr status (for XML import - numeric)
 const MAL_STATUS_MAP_NUMERIC: Record<number, BookTracking['status']> = {
-  1: 'reading',      // Reading
-  2: 'completed',    // Completed
-  3: 'on_hold',      // On-Hold
-  4: 'dropped',      // Dropped
+  1: 'reading', // Reading
+  2: 'completed', // Completed
+  3: 'on_hold', // On-Hold
+  4: 'dropped', // Dropped
   6: 'plan_to_read', // Plan to Read
 }
 
 // MAL status mapping to Trackr status (for API import - string)
 const MAL_STATUS_MAP_STRING: Record<string, BookTracking['status']> = {
-  'reading': 'reading',
-  'completed': 'completed',
-  'on_hold': 'on_hold',
-  'dropped': 'dropped',
-  'plan_to_read': 'plan_to_read',
+  reading: 'reading',
+  completed: 'completed',
+  on_hold: 'on_hold',
+  dropped: 'dropped',
+  plan_to_read: 'plan_to_read',
 }
 
 interface MalMangaEntry {
@@ -153,7 +153,7 @@ export class MalImportService {
       const entries = await this.fetchAllMangaFromApi(username, result)
 
       if (entries.length === 0 && result.errors.length === 0) {
-        result.errors.push('No manga entries found in this user\'s list, or the list is private.')
+        result.errors.push("No manga entries found in this user's list, or the list is private.")
         return result
       }
 
@@ -161,7 +161,6 @@ export class MalImportService {
       for (const entry of entries) {
         await this.matchApiEntry(entry, result)
       }
-
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       result.errors.push(`Failed to fetch manga list: ${errorMessage}`)
@@ -225,9 +224,13 @@ export class MalImportService {
   /**
    * Fetch all manga from MAL API with pagination
    */
-  private async fetchAllMangaFromApi(username: string, result: FetchResult): Promise<MalApiMangaEntry[]> {
+  private async fetchAllMangaFromApi(
+    username: string,
+    result: FetchResult
+  ): Promise<MalApiMangaEntry[]> {
     const allEntries: MalApiMangaEntry[] = []
-    let nextUrl: string | null = `${MAL_API_BASE}/users/${encodeURIComponent(username)}/mangalist?fields=list_status&limit=100`
+    let nextUrl: string | null =
+      `${MAL_API_BASE}/users/${encodeURIComponent(username)}/mangalist?fields=list_status&limit=100`
 
     while (nextUrl) {
       try {
@@ -246,11 +249,15 @@ export class MalImportService {
           }
 
           if (response.status === 403 || errorData.error === 'not_permitted') {
-            result.errors.push(`Access to "${username}"'s manga list is restricted. The list must be public.`)
+            result.errors.push(
+              `Access to "${username}"'s manga list is restricted. The list must be public.`
+            )
             return []
           }
 
-          result.errors.push(`MAL API error: ${response.status} - ${errorData.message || 'Unknown error'}`)
+          result.errors.push(
+            `MAL API error: ${response.status} - ${errorData.message || 'Unknown error'}`
+          )
           return []
         }
 
@@ -262,9 +269,8 @@ export class MalImportService {
 
         // Rate limiting - small delay between requests
         if (nextUrl) {
-          await new Promise(resolve => setTimeout(resolve, 100))
+          await new Promise((resolve) => setTimeout(resolve, 100))
         }
-
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         result.errors.push(`Failed to fetch page: ${errorMessage}`)
@@ -334,7 +340,6 @@ export class MalImportService {
         finishDate: listStatus.finish_date || null,
         notes: null,
       })
-
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       result.errors.push(`Failed to process "${title}": ${errorMessage}`)
@@ -372,7 +377,9 @@ export class MalImportService {
       // Validate export type (2 = manga)
       const exportType = parsed.myanimelist?.myinfo?.user_export_type
       if (exportType !== undefined && exportType !== 2) {
-        result.errors.push('This appears to be an anime list, not a manga list. Please export your manga list from MAL.')
+        result.errors.push(
+          'This appears to be an anime list, not a manga list. Please export your manga list from MAL.'
+        )
         return result
       }
 
@@ -392,7 +399,6 @@ export class MalImportService {
       for (const entry of mangaEntries) {
         await this.matchXmlEntry(entry, result)
       }
-
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error parsing XML'
       result.errors.push(`Failed to parse XML: ${errorMessage}`)
@@ -459,7 +465,6 @@ export class MalImportService {
         finishDate: entry.my_finish_date || null,
         notes: entry.my_comments || null,
       })
-
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       result.errors.push(`Failed to process "${title}": ${errorMessage}`)
