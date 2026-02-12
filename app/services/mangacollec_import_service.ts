@@ -9,7 +9,10 @@ const LOG_TAG = '[MangacollecImport]'
 
 const MANGACOLLEC_BASE_URL = 'https://www.mangacollec.com'
 
-const AI_CONCURRENCY = 3
+const AI_CONCURRENCY = 2
+const AI_RETRY_ATTEMPTS = 3
+const AI_RETRY_BASE_DELAY_MS = 2000
+const AI_CHUNK_DELAY_MS = 1500
 
 type DataStoreSeries = {
   id: string
@@ -318,11 +321,11 @@ export class MangacollecImportService {
 
     const genai = new GoogleGenAI({ apiKey })
 
-    // Process titles with limited concurrency
+    // Process titles with limited concurrency and delay between chunks
     for (let i = 0; i < frenchTitles.length; i += AI_CONCURRENCY) {
       const chunk = frenchTitles.slice(i, i + AI_CONCURRENCY)
       const results = await Promise.allSettled(
-        chunk.map((title) => this.resolveOneTitle(genai, title))
+        chunk.map((title) => this.resolveOneTitleWithRetry(genai, title))
       )
 
       for (const result of results) {
@@ -330,9 +333,40 @@ export class MangacollecImportService {
           translations.set(result.value.french, result.value)
         }
       }
+
+      // Delay between chunks to avoid rate limiting
+      if (i + AI_CONCURRENCY < frenchTitles.length) {
+        await new Promise((resolve) => setTimeout(resolve, AI_CHUNK_DELAY_MS))
+      }
     }
 
     return translations
+  }
+
+  /**
+   * Retry wrapper around resolveOneTitle with exponential backoff.
+   */
+  private async resolveOneTitleWithRetry(
+    genai: GoogleGenAI,
+    frenchTitle: string
+  ): Promise<TitleTranslation | null> {
+    for (let attempt = 1; attempt <= AI_RETRY_ATTEMPTS; attempt++) {
+      const result = await this.resolveOneTitle(genai, frenchTitle)
+      if (result) return result
+
+      if (attempt < AI_RETRY_ATTEMPTS) {
+        const delay = AI_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1)
+        logger.warn(
+          `${LOG_TAG} [Gemini] Retry ${attempt}/${AI_RETRY_ATTEMPTS} for "${frenchTitle}" in ${delay}ms`
+        )
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      }
+    }
+
+    logger.error(
+      `${LOG_TAG} [Gemini] All ${AI_RETRY_ATTEMPTS} attempts failed for "${frenchTitle}"`
+    )
+    return null
   }
 
   /**
@@ -343,14 +377,19 @@ export class MangacollecImportService {
     frenchTitle: string
   ): Promise<TitleTranslation | null> {
     try {
-      const response = await genai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [
-          {
-            role: 'user',
-            parts: [
-              {
-                text: `What is the MyAnimeList manga entry name for the French manga "${frenchTitle}"?
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 30_000)
+
+      let response
+      try {
+        response = await genai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  text: `What is the MyAnimeList manga entry name for the French manga "${frenchTitle}"?
 
 Search the web to find the correct MAL entry. Do NOT translate the title literally.
 
@@ -362,19 +401,23 @@ Respond with ONLY a JSON object (no markdown, no explanation):
 - "japanese": the Japanese title in kanji/kana (null if unknown)
 - "nsfw": true if this manga is adult/hentai/ecchi/pornographic
 - If you cannot find the MAL entry, set english/japanese/romaji to null`,
-              },
-            ],
+                },
+              ],
+            },
+          ],
+          config: {
+            abortSignal: controller.signal,
+            tools: [{ googleSearch: {} }],
+            maxOutputTokens: 1024,
+            temperature: 0,
+            thinkingConfig: {
+              thinkingBudget: 2048,
+            },
           },
-        ],
-        config: {
-          tools: [{ googleSearch: {} }],
-          maxOutputTokens: 1024,
-          temperature: 0,
-          thinkingConfig: {
-            thinkingBudget: 2048,
-          },
-        },
-      })
+        })
+      } finally {
+        clearTimeout(timeout)
+      }
 
       const responseText = response.text || ''
       const jsonStr = this.extractJsonFromResponse(responseText)
@@ -392,7 +435,12 @@ Respond with ONLY a JSON object (no markdown, no explanation):
       logger.warn(`${LOG_TAG} [Gemini] No result for "${frenchTitle}"`)
       return null
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorMessage =
+        error instanceof Error
+          ? error.name === 'AbortError'
+            ? `timeout after 30s`
+            : error.message
+          : 'Unknown error'
       logger.error(`${LOG_TAG} [Gemini] Failed for "${frenchTitle}": ${errorMessage}`)
       return null
     }
