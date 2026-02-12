@@ -96,6 +96,7 @@ export interface PendingImportBook {
   startDate: string | null
   finishDate: string | null
   notes: string | null
+  sourceTitle?: string | null
 }
 
 // Result of fetching from MAL (no tracking created yet)
@@ -212,6 +213,11 @@ export class MalImportService {
         })
 
         result.imported++
+
+        // Save source title as alternative title for future matching (e.g. French title from Mangacollec)
+        if (book.sourceTitle) {
+          await this.saveAlternativeTitle(book.bookId, book.sourceTitle)
+        }
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         result.errors.push(`Failed to import "${book.title}": ${errorMessage}`)
@@ -219,6 +225,36 @@ export class MalImportService {
     }
 
     return result
+  }
+
+  /**
+   * Save a source title as an alternative title on the book for future import matching.
+   */
+  private async saveAlternativeTitle(bookId: number, sourceTitle: string): Promise<void> {
+    try {
+      const book = await Book.find(bookId)
+      if (!book) return
+
+      const existing = book.alternativeTitles || []
+      const normalized = sourceTitle
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+      const alreadyExists = existing.some(
+        (alt) =>
+          alt
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '') === normalized
+      )
+
+      if (alreadyExists) return
+
+      book.alternativeTitles = [...existing, sourceTitle]
+      await book.save()
+    } catch {
+      // Non-critical, silently ignore
+    }
   }
 
   /**
@@ -299,10 +335,11 @@ export class MalImportService {
     }
 
     try {
-      // Find book by MAL ID
+      // Find book by MAL ID (exclude NSFW content)
       const book = await Book.query()
         .where('external_id', malId.toString())
         .where('data_source', 'myanimelist')
+        .where((q) => q.where('nsfw', false).orWhereNull('nsfw'))
         .first()
 
       if (!book) {
@@ -424,10 +461,11 @@ export class MalImportService {
     }
 
     try {
-      // Find book by MAL ID
+      // Find book by MAL ID (exclude NSFW content)
       const book = await Book.query()
         .where('external_id', malId.toString())
         .where('data_source', 'myanimelist')
+        .where((q) => q.where('nsfw', false).orWhereNull('nsfw'))
         .first()
 
       if (!book) {

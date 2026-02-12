@@ -259,12 +259,16 @@ const mapMangaToBook = (manga: z.infer<typeof MangaSchema>) => {
   const englishTitle = normalizeString(manga.title_english)
   const defaultTitle = normalizeString(manga.title)
   const fallbackTitles = uniqueStrings((manga.titles ?? []).map((item) => item.title))
+  const frenchTitle = normalizeString(
+    manga.titles?.find((item) => item.type?.toLowerCase() === 'french')?.title
+  )
   const title = englishTitle ?? defaultTitle ?? fallbackTitles[0] ?? 'Untitled'
 
   const alternativeTitles = uniqueStrings([
     englishTitle,
     normalizeString(manga.title_japanese),
     defaultTitle,
+    frenchTitle,
     ...fallbackTitles,
   ]).filter((candidate) => candidate !== title)
 
@@ -363,14 +367,14 @@ const updateStatement = `
            ELSE COALESCE($2, cover_image)
          END,
          type = $3,
-         rating = rating,
+         rating = COALESCE($4, rating),
          genres = $5,
          release_year = $6,
          end_year = $7,
          description = $8,
          description_fr = CASE
-           WHEN $8 IS NOT DISTINCT FROM description THEN description_fr
-           ELSE NULL
+           WHEN $8 IS NOT DISTINCT FROM description THEN COALESCE($9, description_fr)
+           ELSE $9
          END,
          status = $10,
          volumes = $11,

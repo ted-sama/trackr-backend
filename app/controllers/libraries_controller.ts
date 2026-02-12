@@ -6,7 +6,11 @@ import {
   removeFromTopBooksValidator,
   updateLibraryValidator,
 } from '#validators/library'
-import { malImportValidator, malUsernameImportValidator } from '#validators/mal_import'
+import {
+  malImportValidator,
+  malUsernameImportValidator,
+  mangacollecUsernameImportValidator,
+} from '#validators/mal_import'
 import BookTracking from '#models/book_tracking'
 import { DateTime } from 'luxon'
 import db from '@adonisjs/lucid/services/db'
@@ -14,6 +18,7 @@ import { ActivityLogger } from '#services/activity_logger'
 import ActivityLog from '#models/activity_log'
 import User from '#models/user'
 import { MalImportService, type PendingImportBook } from '#services/mal_import_service'
+import { MangacollecImportService } from '#services/mangacollec_import_service'
 import { readFile, unlink } from 'node:fs/promises'
 import { createGunzip } from 'node:zlib'
 import { pipeline } from 'node:stream/promises'
@@ -509,6 +514,40 @@ export default class LibraryController {
     return response.ok({
       success: true,
       message: `Found ${result.pendingBooks.length} manga(s) to import from MyAnimeList user "${username}"`,
+      ...result,
+    })
+  }
+
+  /**
+   * @summary Fetch library from Mangacollec using username or URL (step 1)
+   * @tag Library
+   * @description Fetches manga series from a public Mangacollec collection without importing them.
+   *              Returns pending books for user review before confirmation.
+   * @requestBody {"username": "Mangacollec username or profile URL"}
+   * @responseBody 200 - Pending books and stats
+   * @responseBody 400 - Invalid username or fetch error
+   * @responseBody 401 - Unauthorized
+   */
+  async fetchFromMangacollec({ auth, request, response }: HttpContext) {
+    const user = await auth.authenticate()
+    const payload = await request.validateUsing(mangacollecUsernameImportValidator)
+    const { username } = payload
+
+    const importService = new MangacollecImportService(user.id)
+    const result = await importService.fetchFromUsername(username)
+
+    if (result.errors.length > 0 && result.pendingBooks.length === 0) {
+      return response.badRequest({
+        success: false,
+        message: 'Fetch failed',
+        code: 'MANGACOLLEC_IMPORT_FAILED',
+        ...result,
+      })
+    }
+
+    return response.ok({
+      success: true,
+      message: `Found ${result.pendingBooks.length} manga(s) to import from Mangacollec`,
       ...result,
     })
   }
