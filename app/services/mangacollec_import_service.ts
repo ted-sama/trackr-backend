@@ -85,12 +85,12 @@ export class MangacollecImportService {
     }
 
     try {
-      logger.info(`${LOG_TAG} Fetching collection for username="${username}"`)
+      logger.debug(`${LOG_TAG} Fetching collection for username="${username}"`)
       const html = await this.fetchCollectionHtml(username)
       const dataStore = this.extractDataStore(html)
       const candidates = this.buildSeriesCandidates(dataStore, username)
 
-      logger.info(`${LOG_TAG} Found ${candidates.length} series candidates from collection`)
+      logger.debug(`${LOG_TAG} Found ${candidates.length} series candidates from collection`)
 
       if (candidates.length === 0) {
         result.errors.push('No series found in this Mangacollec collection.')
@@ -99,7 +99,7 @@ export class MangacollecImportService {
 
       // Load all non-NSFW books once for matching
       await this.loadBooks()
-      logger.info(`${LOG_TAG} Loaded ${this.cachedBooks?.length ?? 0} books from DB for matching`)
+      logger.debug(`${LOG_TAG} Loaded ${this.cachedBooks?.length ?? 0} books from DB for matching`)
 
       // First pass: direct title matching
       const unmatchedCandidates: SeriesCandidate[] = []
@@ -107,27 +107,27 @@ export class MangacollecImportService {
       for (const candidate of candidates) {
         const book = this.matchCandidateToBook(candidate.title)
         if (book) {
-          logger.info(
+          logger.debug(
             `${LOG_TAG} [Pass 1] MATCHED "${candidate.title}" → "${book.title}" (id=${book.id})`
           )
           await this.addBookToResult(book, candidate, result)
         } else {
-          logger.info(`${LOG_TAG} [Pass 1] NO MATCH for "${candidate.title}"`)
+          logger.debug(`${LOG_TAG} [Pass 1] NO MATCH for "${candidate.title}"`)
           unmatchedCandidates.push(candidate)
         }
       }
 
-      logger.info(
+      logger.debug(
         `${LOG_TAG} Pass 1 complete: ${candidates.length - unmatchedCandidates.length} matched, ${unmatchedCandidates.length} unmatched`
       )
 
       // Pass 2: use Gemini AI with Google Search to resolve unmatched French titles
       if (unmatchedCandidates.length > 0) {
-        logger.info(
+        logger.debug(
           `${LOG_TAG} [Pass 2] Sending ${unmatchedCandidates.length} unmatched titles to Gemini AI`
         )
         const translations = await this.resolveWithAi(unmatchedCandidates.map((c) => c.title))
-        logger.info(`${LOG_TAG} [Pass 2] Gemini returned ${translations.size} translations`)
+        logger.debug(`${LOG_TAG} [Pass 2] Gemini returned ${translations.size} translations`)
 
         for (const candidate of unmatchedCandidates) {
           const translation = translations.get(candidate.title)
@@ -136,7 +136,7 @@ export class MangacollecImportService {
           if (translation) {
             // Skip NSFW entries flagged by Gemini
             if (translation.nsfw) {
-              logger.info(
+              logger.debug(
                 `${LOG_TAG} [Pass 2] SKIPPED "${candidate.title}" — flagged NSFW by Gemini`
               )
               result.skipped++
@@ -151,14 +151,14 @@ export class MangacollecImportService {
               translation.japanese,
             ].filter((t): t is string => !!t)
 
-            logger.info(
+            logger.debug(
               `${LOG_TAG} [Pass 2] "${candidate.title}" → Gemini: en="${translation.english}", jp="${translation.japanese}", romaji="${translation.romaji}"`
             )
 
             for (const variant of titleVariants) {
               book = this.matchCandidateToBook(variant)
               if (book) {
-                logger.info(
+                logger.debug(
                   `${LOG_TAG} [Pass 2] MATCHED "${candidate.title}" via variant "${variant}" → "${book.title}" (id=${book.id})`
                 )
                 break
@@ -166,7 +166,7 @@ export class MangacollecImportService {
             }
 
             if (!book) {
-              logger.info(
+              logger.debug(
                 `${LOG_TAG} [Pass 2] NO MATCH for "${candidate.title}" even with variants [${titleVariants.join(', ')}]`
               )
             }
@@ -185,7 +185,7 @@ export class MangacollecImportService {
         }
       }
 
-      logger.info(
+      logger.debug(
         `${LOG_TAG} Import complete: ${result.pendingBooks.length} pending, ${result.alreadyExists} existing, ${result.notFound} not found, ${result.skipped} skipped`
       )
     } catch (error) {
@@ -222,7 +222,7 @@ export class MangacollecImportService {
     for (const book of books) {
       const bookTitleNormalized = this.normalizeTitle(book.title)
       if (bookTitleNormalized && bookTitleNormalized === candidateNormalized) {
-        logger.info(
+        logger.debug(
           `${LOG_TAG} [Match] "${title}" exact-title match → "${book.title}" (id=${book.id})`
         )
         return book
@@ -232,7 +232,7 @@ export class MangacollecImportService {
       for (const alt of alternatives) {
         const altNormalized = this.normalizeTitle(alt)
         if (altNormalized && altNormalized === candidateNormalized) {
-          logger.info(
+          logger.debug(
             `${LOG_TAG} [Match] "${title}" exact-alt match on "${alt}" → "${book.title}" (id=${book.id})`
           )
           return book
@@ -241,7 +241,7 @@ export class MangacollecImportService {
 
       const titleScore = this.scoreTitles(title, book.title)
       if (titleScore >= 0.95 && (!best || titleScore > best.score)) {
-        logger.info(
+        logger.debug(
           `${LOG_TAG} [Match] "${title}" score=${titleScore.toFixed(3)} on title "${book.title}" (id=${book.id})`
         )
         best = { book, score: titleScore }
@@ -254,7 +254,7 @@ export class MangacollecImportService {
       for (const alt of alternatives) {
         const score = this.scoreTitles(title, alt)
         if (score >= 0.9 && (!best || score > best.score)) {
-          logger.info(
+          logger.debug(
             `${LOG_TAG} [Match] "${title}" score=${score.toFixed(3)} on alt "${alt}" of "${book.title}" (id=${book.id})`
           )
           best = { book, score }
@@ -383,7 +383,7 @@ Respond with ONLY a JSON object (no markdown, no explanation):
       // Handle both single object and array responses
       const entry = Array.isArray(parsed) ? parsed[0] : parsed
       if (entry && entry.french) {
-        logger.info(
+        logger.debug(
           `${LOG_TAG} [Gemini] "${frenchTitle}" → romaji="${entry.romaji}", en="${entry.english}", nsfw=${entry.nsfw}`
         )
         return entry
@@ -475,8 +475,8 @@ Respond with ONLY a JSON object (no markdown, no explanation):
     const editions = dataStore.editions?.data || {}
     const candidates = new Map<string, SeriesCandidate>()
 
-    logger.info(`${LOG_TAG} DATA_STORE keys: ${Object.keys(dataStore).join(', ')}`)
-    logger.info(
+    logger.debug(`${LOG_TAG} DATA_STORE keys: ${Object.keys(dataStore).join(', ')}`)
+    logger.debug(
       `${LOG_TAG} DATA_STORE contains ${Object.keys(series).length} series, ${Object.keys(editions).length} editions`
     )
 
@@ -484,7 +484,7 @@ Respond with ONLY a JSON object (no markdown, no explanation):
     const ownedEditionIds = this.extractOwnedEditionIds(dataStore, username)
 
     if (ownedEditionIds) {
-      logger.info(
+      logger.debug(
         `${LOG_TAG} publicCollection found: ${ownedEditionIds.size} owned edition IDs for user "${username}"`
       )
     } else {
@@ -498,7 +498,7 @@ Respond with ONLY a JSON object (no markdown, no explanation):
       ? Object.values(editions).filter((ed) => ownedEditionIds.has(ed.id))
       : Object.values(editions)
 
-    logger.info(`${LOG_TAG} Processing ${editionsToProcess.length} editions`)
+    logger.debug(`${LOG_TAG} Processing ${editionsToProcess.length} editions`)
 
     let skippedAdult = 0
     for (const edition of editionsToProcess) {
@@ -523,7 +523,7 @@ Respond with ONLY a JSON object (no markdown, no explanation):
     }
 
     if (skippedAdult > 0) {
-      logger.info(`${LOG_TAG} Skipped ${skippedAdult} adult content editions`)
+      logger.debug(`${LOG_TAG} Skipped ${skippedAdult} adult content editions`)
     }
 
     return Array.from(candidates.values())
