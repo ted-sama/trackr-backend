@@ -49,6 +49,7 @@ export default await Env.create(new URL('../', import.meta.url), {
   // Comic Vine API (for fetching comic covers)
   COMICVINE_API_KEY: Env.schema.string.optional(),
 
+
   // GCD (Grand Comics Database) paths and credentials
   GCD_DB_PATH: Env.schema.string.optional(),
   GCD_DOWNLOAD_DIR: Env.schema.string.optional(),

@@ -20,3 +20,12 @@ export const malUsernameImportValidator = vine.compile(
     username: vine.string().trim().minLength(2).maxLength(16),
   })
 )
+
+/**
+ * Validator for Mangacollec username or profile URL
+ */
+export const mangacollecUsernameImportValidator = vine.compile(
+  vine.object({
+    username: vine.string().trim().minLength(2).maxLength(200),
+  })
+)
