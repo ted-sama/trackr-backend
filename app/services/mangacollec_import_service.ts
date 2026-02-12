@@ -4,6 +4,7 @@ import logger from '@adonisjs/core/services/logger'
 import Book from '#models/book'
 import BookTracking from '#models/book_tracking'
 import type { FetchResult } from '#services/mal_import_service'
+import type { ImportJobProgress } from '#services/import_job_store'
 
 const LOG_TAG = '[MangacollecImport]'
 
@@ -67,7 +68,10 @@ export class MangacollecImportService {
     this.userId = userId
   }
 
-  async fetchFromUsername(input: string): Promise<FetchResult> {
+  async fetchFromUsername(
+    input: string,
+    onProgress?: (update: Partial<ImportJobProgress>) => void
+  ): Promise<FetchResult> {
     const result: FetchResult = {
       pendingBooks: [],
       notFound: 0,
@@ -89,6 +93,7 @@ export class MangacollecImportService {
 
     try {
       logger.debug(`${LOG_TAG} Fetching collection for username="${username}"`)
+      onProgress?.({ stage: 'scraping' })
       const html = await this.fetchCollectionHtml(username)
       const dataStore = this.extractDataStore(html)
       const candidates = this.buildSeriesCandidates(dataStore, username)
@@ -99,6 +104,8 @@ export class MangacollecImportService {
         result.errors.push('No series found in this Mangacollec collection.')
         return result
       }
+
+      onProgress?.({ stage: 'matching', totalCandidates: candidates.length })
 
       // Load all non-NSFW books once for matching
       await this.loadBooks()
@@ -126,10 +133,20 @@ export class MangacollecImportService {
 
       // Pass 2: use Gemini AI with Google Search to resolve unmatched French titles
       if (unmatchedCandidates.length > 0) {
+        onProgress?.({
+          stage: 'resolving',
+          matchedInPass1: candidates.length - unmatchedCandidates.length,
+          totalToResolve: unmatchedCandidates.length,
+          resolvedCount: 0,
+        })
+
         logger.debug(
           `${LOG_TAG} [Pass 2] Sending ${unmatchedCandidates.length} unmatched titles to Gemini AI`
         )
-        const translations = await this.resolveWithAi(unmatchedCandidates.map((c) => c.title))
+        const translations = await this.resolveWithAi(
+          unmatchedCandidates.map((c) => c.title),
+          onProgress
+        )
         logger.debug(`${LOG_TAG} [Pass 2] Gemini returned ${translations.size} translations`)
 
         for (const candidate of unmatchedCandidates) {
@@ -310,7 +327,10 @@ export class MangacollecImportService {
    * to their MyAnimeList entry names. Each title is resolved individually
    * for best Google Search accuracy.
    */
-  private async resolveWithAi(frenchTitles: string[]): Promise<Map<string, TitleTranslation>> {
+  private async resolveWithAi(
+    frenchTitles: string[],
+    onProgress?: (update: Partial<ImportJobProgress>) => void
+  ): Promise<Map<string, TitleTranslation>> {
     const translations = new Map<string, TitleTranslation>()
 
     const apiKey = env.get('GEMINI_API_KEY')
@@ -333,6 +353,10 @@ export class MangacollecImportService {
           translations.set(result.value.french, result.value)
         }
       }
+
+      const resolvedCount = Math.min(i + AI_CONCURRENCY, frenchTitles.length)
+      const currentTitle = chunk[chunk.length - 1] ?? null
+      onProgress?.({ resolvedCount, currentTitle })
 
       // Delay between chunks to avoid rate limiting
       if (i + AI_CONCURRENCY < frenchTitles.length) {

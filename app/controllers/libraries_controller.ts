@@ -19,6 +19,8 @@ import ActivityLog from '#models/activity_log'
 import User from '#models/user'
 import { MalImportService, type PendingImportBook } from '#services/mal_import_service'
 import { MangacollecImportService } from '#services/mangacollec_import_service'
+import importJobStore from '#services/import_job_store'
+import logger from '@adonisjs/core/services/logger'
 import { readFile, unlink } from 'node:fs/promises'
 import { createGunzip } from 'node:zlib'
 import { pipeline } from 'node:stream/promises'
@@ -519,13 +521,12 @@ export default class LibraryController {
   }
 
   /**
-   * @summary Fetch library from Mangacollec using username or URL (step 1)
+   * @summary Start async Mangacollec import (returns jobId immediately)
    * @tag Library
-   * @description Fetches manga series from a public Mangacollec collection without importing them.
-   *              Returns pending books for user review before confirmation.
+   * @description Starts an async import from a public Mangacollec collection.
+   *              Returns a jobId to poll for progress via the status endpoint.
    * @requestBody {"username": "Mangacollec username or profile URL"}
-   * @responseBody 200 - Pending books and stats
-   * @responseBody 400 - Invalid username or fetch error
+   * @responseBody 202 - {"jobId": "string"} - Import job started
    * @responseBody 401 - Unauthorized
    */
   async fetchFromMangacollec({ auth, request, response }: HttpContext) {
@@ -533,23 +534,110 @@ export default class LibraryController {
     const payload = await request.validateUsing(mangacollecUsernameImportValidator)
     const { username } = payload
 
-    const importService = new MangacollecImportService(user.id)
-    const result = await importService.fetchFromUsername(username)
+    // Check for existing active job
+    const existingJob = importJobStore.getJobByUserId(user.id)
+    if (existingJob && existingJob.progress.stage !== 'completed' && existingJob.progress.stage !== 'failed') {
+      return response.accepted({ jobId: existingJob.id })
+    }
 
-    if (result.errors.length > 0 && result.pendingBooks.length === 0) {
-      return response.badRequest({
-        success: false,
-        message: 'Fetch failed',
-        code: 'MANGACOLLEC_IMPORT_FAILED',
-        ...result,
+    const jobId = importJobStore.createJob(user.id)
+
+    // Fire-and-forget: start import in the background
+    const importService = new MangacollecImportService(user.id)
+    importService
+      .fetchFromUsername(username, (update) => {
+        importJobStore.updateProgress(jobId, update)
+      })
+      .then((result) => {
+        importJobStore.completeJob(jobId, result)
+        logger.info(`[MangacollecImport] Job ${jobId} completed for user ${user.id}`)
+      })
+      .catch((error) => {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        importJobStore.failJob(jobId, errorMessage)
+        logger.error(`[MangacollecImport] Job ${jobId} failed for user ${user.id}: ${errorMessage}`)
+      })
+
+    return response.accepted({ jobId })
+  }
+
+  /**
+   * @summary Get Mangacollec import job status
+   * @tag Library
+   * @description Returns the current status and progress of a Mangacollec import job.
+   * @paramPath jobId - Import job ID - @type(string) @required
+   * @responseBody 200 - Job status with progress or result
+   * @responseBody 404 - Job not found
+   */
+  async getMangacollecImportStatus({ auth, params, response }: HttpContext) {
+    await auth.authenticate()
+    const job = importJobStore.getJob(params.jobId)
+
+    if (!job) {
+      return response.notFound({ code: 'IMPORT_JOB_NOT_FOUND' })
+    }
+
+    if (job.progress.stage === 'completed') {
+      return response.ok({
+        status: 'completed',
+        progress: job.progress,
+        result: {
+          success: true,
+          message: `Found ${job.result?.pendingBooks.length ?? 0} manga(s) to import from Mangacollec`,
+          ...job.result,
+        },
+      })
+    }
+
+    if (job.progress.stage === 'failed') {
+      return response.ok({
+        status: 'failed',
+        error: job.error,
       })
     }
 
     return response.ok({
-      success: true,
-      message: `Found ${result.pendingBooks.length} manga(s) to import from Mangacollec`,
-      ...result,
+      status: 'processing',
+      progress: job.progress,
     })
+  }
+
+  /**
+   * @summary Get active Mangacollec import for current user
+   * @tag Library
+   * @description Returns the most recent Mangacollec import job for the current user, if any.
+   * @responseBody 200 - Active job with status and progress
+   * @responseBody 204 - No active import
+   */
+  async getActiveMangacollecImport({ auth, response }: HttpContext) {
+    const user = await auth.authenticate()
+    const job = importJobStore.getJobByUserId(user.id)
+
+    if (!job) {
+      return response.noContent()
+    }
+
+    const payload: Record<string, any> = {
+      jobId: job.id,
+      status: job.progress.stage === 'completed' ? 'completed'
+        : job.progress.stage === 'failed' ? 'failed'
+        : 'processing',
+      progress: job.progress,
+    }
+
+    if (job.progress.stage === 'completed' && job.result) {
+      payload.result = {
+        success: true,
+        message: `Found ${job.result.pendingBooks.length} manga(s) to import from Mangacollec`,
+        ...job.result,
+      }
+    }
+
+    if (job.progress.stage === 'failed') {
+      payload.error = job.error
+    }
+
+    return response.ok(payload)
   }
 
   /**
