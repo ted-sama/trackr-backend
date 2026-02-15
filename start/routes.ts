@@ -95,6 +95,7 @@ router
     router.post('/books/import/mal/confirm', [LibraryController, 'confirmMalImport'])
     router.post('/books/import/mangacollec/fetch', [LibraryController, 'fetchFromMangacollec'])
     router.get('/books/import/mangacollec/active', [LibraryController, 'getActiveMangacollecImport'])
+    router.delete('/books/import/mangacollec/dismiss', [LibraryController, 'dismissMangacollecImport'])
     router.get('/books/import/mangacollec/status/:jobId', [LibraryController, 'getMangacollecImportStatus'])
     router.get('/top', [UsersController, 'showTopBooks'])
     router.post('/top/:bookId', [LibraryController, 'addToTopBooks'])

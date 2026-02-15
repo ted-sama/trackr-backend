@@ -87,6 +87,17 @@ class ImportJobStore {
     job.error = error
   }
 
+  dismissJob(jobId: string): void {
+    this.removeJob(jobId)
+  }
+
+  dismissJobByUserId(userId: string): void {
+    const jobId = this.userJobMap.get(userId)
+    if (jobId) {
+      this.removeJob(jobId)
+    }
+  }
+
   private removeJob(jobId: string): void {
     const job = this.jobs.get(jobId)
     if (job) {

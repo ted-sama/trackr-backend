@@ -641,6 +641,18 @@ export default class LibraryController {
   }
 
   /**
+   * @summary Dismiss / cancel a Mangacollec import job
+   * @tag Library
+   * @description Removes the current user's import job from the server so it won't be returned by /active anymore.
+   * @responseBody 204 - Job dismissed
+   */
+  async dismissMangacollecImport({ auth, response }: HttpContext) {
+    const user = await auth.authenticate()
+    importJobStore.dismissJobByUserId(user.id)
+    return response.noContent()
+  }
+
+  /**
    * @summary Confirm MAL import (step 2)
    * @tag Library
    * @description Confirms the import of selected books from the pending list.
