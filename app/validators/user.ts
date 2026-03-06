@@ -3,7 +3,7 @@ import vine from '@vinejs/vine'
 export const showSchema = vine.compile(
   vine.object({
     params: vine.object({
-      username: vine.string().toLowerCase().trim(),
+      username: vine.string().trim(),
     }),
   })
 )

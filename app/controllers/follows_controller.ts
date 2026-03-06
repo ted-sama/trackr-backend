@@ -17,7 +17,7 @@ export default class FollowsController {
     const currentUser = await auth.authenticate()
     const { username } = params
 
-    const targetUser = await User.findBy('username', username)
+    const targetUser = await User.query().whereRaw('LOWER(username) = LOWER(?)', [username]).first()
 
     if (!targetUser) {
       throw new AppError('User not found', {
@@ -53,7 +53,7 @@ export default class FollowsController {
     const currentUser = await auth.authenticate()
     const { username } = params
 
-    const targetUser = await User.findBy('username', username)
+    const targetUser = await User.query().whereRaw('LOWER(username) = LOWER(?)', [username]).first()
 
     if (!targetUser) {
       throw new AppError('User not found', {
@@ -86,7 +86,7 @@ export default class FollowsController {
     const limit = Math.min(request.input('limit', 20), 50)
     const search = request.input('q')
 
-    const targetUser = await User.findBy('username', username)
+    const targetUser = await User.query().whereRaw('LOWER(username) = LOWER(?)', [username]).first()
 
     if (!targetUser) {
       throw new AppError('User not found', {
@@ -150,7 +150,7 @@ export default class FollowsController {
     const limit = Math.min(request.input('limit', 20), 50)
     const search = request.input('q')
 
-    const targetUser = await User.findBy('username', username)
+    const targetUser = await User.query().whereRaw('LOWER(username) = LOWER(?)', [username]).first()
 
     if (!targetUser) {
       throw new AppError('User not found', {

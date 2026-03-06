@@ -65,7 +65,9 @@ export default class StatsController {
    * @description Returns various statistics about a specific user's reading habits (target user must have Plus subscription)
    */
   async showUserStats({ auth, params, request, response }: HttpContext) {
-    const user = await User.findBy('username', params.username)
+    const user = await User.query()
+      .whereRaw('LOWER(username) = LOWER(?)', [params.username])
+      .first()
     if (!user) {
       return response.notFound({ message: 'User not found' })
     }
@@ -158,7 +160,9 @@ export default class StatsController {
    * @description Returns books filtered by genre, type, rating, series length, or author for a specific user
    */
   async getFilteredBooksForUser({ auth, params, request, response }: HttpContext) {
-    const user = await User.findBy('username', params.username)
+    const user = await User.query()
+      .whereRaw('LOWER(username) = LOWER(?)', [params.username])
+      .first()
     if (!user) {
       return response.notFound({ message: 'User not found' })
     }
@@ -224,7 +228,7 @@ export default class StatsController {
 
       case 'rating':
         // Filter by user rating (exact match)
-        const ratingValue = parseFloat(filterValue)
+        const ratingValue = Number.parseFloat(filterValue)
         trackings = await createBaseQuery().whereNotNull('rating').where('rating', ratingValue)
         break
 

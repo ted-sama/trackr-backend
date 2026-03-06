@@ -537,7 +537,7 @@ export default class ReviewsController {
     }
 
     // Find user
-    const user = await User.findBy('username', username)
+    const user = await User.query().whereRaw('LOWER(username) = LOWER(?)', [username]).first()
     if (!user) {
       throw new AppError('User not found', {
         status: 404,

@@ -67,7 +67,7 @@ export default class LibraryController {
    * @responseBody 404 - User not found
    */
   async showUserBooks({ auth, params, request, response }: HttpContext) {
-    const user = await User.findBy('username', params.username)
+    const user = await User.query().whereRaw('LOWER(username) = LOWER(?)', [params.username]).first()
     if (!user) {
       return response.notFound({ message: 'User not found' })
     }

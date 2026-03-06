@@ -121,7 +121,7 @@ export default class UsersController {
   async show({ auth, request, response }: HttpContext) {
     const { params } = await request.validateUsing(showSchema)
     const { username } = params
-    const userRecord = await User.query().where('username', username).first()
+    const userRecord = await User.query().whereRaw('LOWER(username) = LOWER(?)', [username]).first()
 
     if (!userRecord) {
       throw new AppError('User not found', {
@@ -177,7 +177,7 @@ export default class UsersController {
     const { params } = await request.validateUsing(showSchema)
     const { username } = params
 
-    const userRecord = await User.query().where('username', username).first()
+    const userRecord = await User.query().whereRaw('LOWER(username) = LOWER(?)', [username]).first()
 
     if (!userRecord) {
       throw new AppError('User not found', {
@@ -208,7 +208,7 @@ export default class UsersController {
     } = await request.validateUsing(showListsQuerySchema)
     const currentUser = auth.user ?? null
 
-    const userRecord = await User.query().where('username', username).first()
+    const userRecord = await User.query().whereRaw('LOWER(username) = LOWER(?)', [username]).first()
 
     if (!userRecord) {
       throw new AppError('User not found', {
@@ -287,7 +287,7 @@ export default class UsersController {
     } = await request.validateUsing(updateSchema)
 
     if (username && username !== user.username) {
-      const existingUserByUsername = await User.findBy('username', username)
+      const existingUserByUsername = await User.query().whereRaw('LOWER(username) = LOWER(?)', [username]).first()
       if (existingUserByUsername) {
         throw new AppError('Username already used', {
           status: 409,
@@ -626,7 +626,7 @@ export default class UsersController {
 
     const { params } = await request.validateUsing(showSchema)
     const { username } = params
-    const user = await User.query().where('username', username).first()
+    const user = await User.query().whereRaw('LOWER(username) = LOWER(?)', [username]).first()
 
     if (!user) {
       throw new AppError('User not found', {
