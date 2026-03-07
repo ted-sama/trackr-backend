@@ -112,4 +112,12 @@ export default await Env.create(new URL('../', import.meta.url), {
   */
   MAL_CLIENT_ID: Env.schema.string.optional(),
 
+  /*
+  |----------------------------------------------------------
+  | Admin API Keys
+  |----------------------------------------------------------
+  */
+  ADMIN_API_KEY_TED: Env.schema.string.optional(),
+  ADMIN_API_KEY_ZANGO: Env.schema.string.optional(),
+
 })
