@@ -279,8 +279,8 @@ router
     // Activity Feed
     router.get('/activity', [AdminApiController, 'activity'])
 
-    // Top Manga
-    router.get('/top-manga', [AdminApiController, 'topManga'])
+    // Top Books (manga, manhwa, comics, etc.)
+    router.get('/top-books', [AdminApiController, 'topBooks'])
   })
   .prefix('admin/api')
   .use([middleware.adminApiKey()])
