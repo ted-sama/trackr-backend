@@ -407,7 +407,7 @@ export class MangacollecImportService {
       let response
       try {
         response = await genai.models.generateContent({
-          model: 'gemini-3.1-flash-lite',
+          model: 'gemini-3.1-flash-lite-preview',
           contents: [
             {
               role: 'user',
