@@ -438,20 +438,28 @@ export default class AdminApiController {
   }
 
   /**
-   * @summary Get most popular manga/books
+   * @summary Get most popular books
    * @tag Admin API
-   * @description Returns most tracked books with stats
+   * @description Returns most tracked books with stats (manga, manhwa, comics, etc.)
    * @paramQuery limit - Number of items (default 20) - @type(number)
    * @paramQuery period - Time period (all/week/month) - @type(string)
+   * @paramQuery type - Filter by book type (manga/manhwa/manhua/comic/webtoon/novel) - @type(string)
    * @responseBody 200 - Array of popular books
    * @responseBody 401 - Unauthorized
    */
-  async topManga({ request, response }: HttpContext) {
+  async topBooks({ request, response }: HttpContext) {
     const limit = Math.min(request.input('limit', 20), 100)
     const period = request.input('period', 'all')
+    const type = request.input('type')
 
     let dateFilter = ''
+    let typeFilter = ''
     const params: any[] = []
+
+    if (type) {
+      typeFilter = 'WHERE b.type = ?'
+      params.push(type)
+    }
 
     if (period === 'week') {
       dateFilter = 'AND bt.created_at >= ?'
@@ -478,6 +486,7 @@ export default class AdminApiController {
       FROM books b
       LEFT JOIN book_tracking bt ON b.id = bt.book_id ${dateFilter}
       LEFT JOIN book_reviews br ON b.id = br.book_id
+      ${typeFilter}
       GROUP BY b.id
       ORDER BY tracking_count DESC
       LIMIT ?
