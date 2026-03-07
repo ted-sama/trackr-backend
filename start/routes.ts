@@ -22,6 +22,7 @@ const SubscriptionsController = () => import('#controllers/subscriptions_control
 const ReportsController = () => import('#controllers/reports_controller')
 const ReviewsController = () => import('#controllers/reviews_controller')
 const ModerationsController = () => import('#controllers/moderations_controller')
+const AdminApiController = () => import('#controllers/admin_api_controller')
 const NotificationsController = () => import('#controllers/notifications_controller')
 const GenresController = () => import('#controllers/genres_controller')
 const FollowsController = () => import('#controllers/follows_controller')
@@ -262,3 +263,24 @@ router
   })
   .prefix('admin/moderation')
   .use([middleware.auth(), middleware.admin()])
+
+// Admin API routes (API key authentication, separate from user JWT auth)
+router
+  .group(() => {
+    // Users
+    router.get('/users', [AdminApiController, 'listUsers'])
+    router.get('/users/:id', [AdminApiController, 'showUser'])
+
+    // Platform Stats
+    router.get('/stats', [AdminApiController, 'stats'])
+    router.get('/stats/growth', [AdminApiController, 'statsGrowth'])
+    router.get('/stats/retention', [AdminApiController, 'statsRetention'])
+
+    // Activity Feed
+    router.get('/activity', [AdminApiController, 'activity'])
+
+    // Top Manga
+    router.get('/top-manga', [AdminApiController, 'topManga'])
+  })
+  .prefix('admin/api')
+  .use([middleware.adminApiKey()])

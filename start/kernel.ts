@@ -47,4 +47,5 @@ export const middleware = router.named({
   admin: () => import('#middleware/admin_middleware'),
   banned: () => import('#middleware/banned_middleware'),
   rateLimit: () => import('#middleware/rate_limiter_middleware'),
+  adminApiKey: () => import('#middleware/admin_api_key_middleware'),
 })
