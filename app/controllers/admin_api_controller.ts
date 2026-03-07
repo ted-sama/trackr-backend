@@ -261,50 +261,45 @@ export default class AdminApiController {
       ? DateTime.fromISO(fromDate)
       : endDate.minus({ days: period === 'month' ? 365 : period === 'week' ? 90 : 30 })
 
-    let dateFormat: string
-    let truncate: string
+    const truncate = ['week', 'month'].includes(period) ? period : 'day'
 
-    switch (period) {
-      case 'week':
-        dateFormat = 'YYYY-IW' // ISO week
-        truncate = 'week'
-        break
-      case 'month':
-        dateFormat = 'YYYY-MM'
-        truncate = 'month'
-        break
-      default:
-        dateFormat = 'YYYY-MM-DD'
-        truncate = 'day'
+    // Validate truncate/dateFormat to prevent SQL injection (these can't be parameterized)
+    const allowedTruncate = ['day', 'week', 'month']
+    const allowedFormat: Record<string, string> = {
+      day: 'YYYY-MM-DD',
+      week: 'IYYY-IW',
+      month: 'YYYY-MM',
     }
+    const safeTruncate = allowedTruncate.includes(truncate) ? truncate : 'day'
+    const safeDateFormat = allowedFormat[safeTruncate]
 
     const [newUsersData, activeUsersData] = await Promise.all([
       // New users per period
       db.rawQuery(
         `
         SELECT
-          TO_CHAR(DATE_TRUNC(?, created_at), ?) as date,
+          TO_CHAR(DATE_TRUNC('${safeTruncate}', created_at), '${safeDateFormat}') as date,
           COUNT(*) as new_users
         FROM users
         WHERE created_at >= ? AND created_at <= ?
-        GROUP BY DATE_TRUNC(?, created_at)
+        GROUP BY 1
         ORDER BY date ASC
       `,
-        [truncate, dateFormat, startDate.toSQL(), endDate.toSQL(), truncate]
+        [startDate.toSQL(), endDate.toSQL()]
       ),
 
       // Active users per period (users with activity logs)
       db.rawQuery(
         `
         SELECT
-          TO_CHAR(DATE_TRUNC(?, created_at), ?) as date,
+          TO_CHAR(DATE_TRUNC('${safeTruncate}', created_at), '${safeDateFormat}') as date,
           COUNT(DISTINCT user_id) as active_users
         FROM activity_logs
         WHERE created_at >= ? AND created_at <= ?
-        GROUP BY DATE_TRUNC(?, created_at)
+        GROUP BY 1
         ORDER BY date ASC
       `,
-        [truncate, dateFormat, startDate.toSQL(), endDate.toSQL(), truncate]
+        [startDate.toSQL(), endDate.toSQL()]
       ),
     ])
 
