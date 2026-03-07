@@ -70,7 +70,7 @@ export default class AdminApiController {
     const listCountMap = new Map(listCounts.map((r) => [r.user_id, Number(r.count)]))
 
     const serialized = users.serialize()
-    serialized.data = users.map((user) => ({
+    serialized.data = users.all().map((user) => ({
       id: user.id,
       username: user.username,
       displayName: user.displayName,
